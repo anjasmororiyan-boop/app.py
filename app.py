@@ -1,73 +1,125 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
-# Judul Aplikasi
-st.set_page_config(page_title="ERP SCM Test", layout="wide")
-st.title("🚀 ERP Purchase & Supply Chain Prototype")
+# Konfigurasi Halaman
+st.set_page_config(page_title="ERP Purchase & SCM", layout="wide")
 
-# Simulasi Database Sederhana
+# --- DATABASE SIMULATION (SESSION STATE) ---
+if 'master_items' not in st.session_state:
+    st.session_state.master_items = pd.DataFrame([
+        {"SKU": "BRG001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Min_Stok": 50},
+        {"SKU": "BRG002", "Nama": "Minyak Goreng", "Satuan": "Liter", "Min_Stok": 20}
+    ])
+
 if 'inventory' not in st.session_state:
-    st.session_state.inventory = [
-        {"SKU": "B001", "Nama": "Tepung Terigu", "Stok": 50, "Min": 100},
-        {"SKU": "B002", "Nama": "Mentega Blueband", "Stok": 120, "Min": 50},
-        {"SKU": "B003", "Nama": "Gula Pasir", "Stok": 10, "Min": 60},
-    ]
+    st.session_state.inventory = {"BRG001": 10, "BRG002": 5}
 
-if 'po_list' not in st.session_state:
-    st.session_state.po_list = []
+if 'pr_data' not in st.session_state:
+    st.session_state.pr_data = []
 
-# --- SIDEBAR MENU ---
-menu = st.sidebar.selectbox("Menu Utama", ["Dashboard", "Procurement", "Inventory Control"])
+# --- FUNGSI HELPER ---
+def add_pr(user, item_sku, qty, price):
+    total = qty * price
+    status = "Pending Manager"
+    st.session_state.pr_data.append({
+        "ID_PR": f"PR-{datetime.now().strftime('%y%m%d%H%M%S')}",
+        "User": user,
+        "SKU": item_sku,
+        "Qty": qty,
+        "Harga_Satuan": price,
+        "Total": total,
+        "Status": status,
+        "Tanggal": datetime.now().date()
+    })
 
-# --- HALAMAN DASHBOARD ---
+# --- UI SIDEBAR ---
+st.sidebar.title("ERP SCM System")
+menu = st.sidebar.radio("Navigasi", ["Dashboard", "Master Item", "User PR", "Approval Workflow", "PO & Goods Receipt"])
+
+# --- 1. DASHBOARD ---
 if menu == "Dashboard":
-    st.header("Ringkasan Operasional")
+    st.header("📊 Supply Chain Dashboard")
+    col1, col2 = st.columns(2)
     
-    col1, col2, col3 = st.columns(3)
-    low_stock_count = len([i for i in st.session_state.inventory if i['Stok'] < i['Min']])
+    with col1:
+        st.subheader("Status Stok")
+        st.write(pd.DataFrame([
+            {"Item": row['Nama'], "Stok": st.session_state.inventory.get(row['SKU'], 0), "Min": row['Min_Stok']}
+            for _, row in st.session_state.master_items.iterrows()
+        ]))
+
+# --- 2. MASTER ITEM ---
+elif menu == "Master Item":
+    st.header("📦 Master Data Barang")
+    with st.expander("Tambah Item Baru"):
+        with st.form("fm_item"):
+            n_sku = st.text_input("SKU")
+            n_nama = st.text_input("Nama Barang")
+            n_satuan = st.selectbox("Satuan", ["Kg", "Liter", "Pcs", "Box"])
+            n_min = st.number_input("Minimum Stok", min_value=1)
+            if st.form_submit_button("Simpan"):
+                new_row = {"SKU": n_sku, "Nama": n_nama, "Satuan": n_satuan, "Min_Stok": n_min}
+                st.session_state.master_items = pd.concat([st.session_state.master_items, pd.DataFrame([new_row])], ignore_index=True)
+                st.success("Item berhasil ditambahkan!")
+    st.table(st.session_state.master_items)
+
+# --- 3. USER PR ---
+elif menu == "User PR":
+    st.header("📝 Purchase Requisition (PR)")
+    with st.form("fm_pr"):
+        u_name = st.text_input("Nama Peminta (User)")
+        u_item = st.selectbox("Pilih Barang", st.session_state.master_items['Nama'].tolist())
+        u_sku = st.session_state.master_items[st.session_state.master_items['Nama'] == u_item]['SKU'].values[0]
+        u_qty = st.number_input("Jumlah", min_value=1)
+        u_price = st.number_input("Estimasi Harga Satuan (Rp)", min_value=0)
+        if st.form_submit_button("Ajukan PR"):
+            add_pr(u_name, u_sku, u_qty, u_price)
+            st.info("PR telah diajukan dan menunggu approval.")
     
-    col1.metric("Total Item", len(st.session_state.inventory))
-    col2.metric("Stok Kritis", low_stock_count, delta_color="inverse")
-    col3.metric("PO Pending", len(st.session_state.po_list))
+    st.subheader("Data PR Anda")
+    if st.session_state.pr_data:
+        st.table(pd.DataFrame(st.session_state.pr_data))
 
-    st.subheader("Peringatan Stok Rendah")
-    for item in st.session_state.inventory:
-        if item['Stok'] < item['Min']:
-            st.warning(f"⚠️ {item['Nama']} (SKU: {item['SKU']}) segera habis! Stok: {item['Stok']}, Batas Min: {item['Min']}")
+# --- 4. APPROVAL WORKFLOW ---
+elif menu == "Approval Workflow":
+    st.header("⚖️ Approval Portal")
+    if not st.session_state.pr_data:
+        st.write("Tidak ada PR yang perlu diproses.")
+    else:
+        for i, pr in enumerate(st.session_state.pr_data):
+            if "Pending" in pr['Status']:
+                with st.container():
+                    st.write(f"**PR ID:** {pr['ID_PR']} | **User:** {pr['User']} | **Total:** Rp{pr['Total']:,}")
+                    col_a, col_b = st.columns(2)
+                    if col_a.button(f"Approve {pr['ID_PR']}", key=f"app_{i}"):
+                        # Logic Workflow: Jika > 10jt butuh Direktur
+                        if pr['Total'] > 10000000 and pr['Status'] == "Pending Manager":
+                            st.session_state.pr_data[i]['Status'] = "Pending Direktur"
+                        else:
+                            st.session_state.pr_data[i]['Status'] = "Approved (PO Ready)"
+                        st.rerun()
+                    if col_b.button(f"Reject {pr['ID_PR']}", key=f"rej_{i}"):
+                        st.session_state.pr_data[i]['Status'] = "Rejected"
+                        st.rerun()
+        st.divider()
+        st.table(pd.DataFrame(st.session_state.pr_data))
 
-# --- HALAMAN PROCUREMENT ---
-elif menu == "Procurement":
-    st.header("Buat Purchase Order (PO)")
+# --- 5. PO & GOODS RECEIPT ---
+elif menu == "PO & Goods Receipt":
+    st.header("🚚 Purchase Order & GR")
+    approved_prs = [p for p in st.session_state.pr_data if p['Status'] == "Approved (PO Ready)"]
     
-    with st.form("form_po"):
-        vendor = st.selectbox("Pilih Vendor", ["PT Indosari", "Logistik Utama", "CV Rasa"])
-        item_name = st.selectbox("Pilih Barang", [i['Nama'] for i in st.session_state.inventory])
-        qty = st.number_input("Jumlah Pesanan", min_value=1)
-        price = st.number_input("Harga Satuan (Rp)", min_value=1000)
-        submit = st.form_submit_button("Ajukan PO")
-
-    if submit:
-        total = qty * price
-        # Logika Approval Berdasarkan Nominal
-        status = "Menunggu Direktur" if total > 10000000 else "Disetujui Manajer"
-        
-        new_po = {
-            "ID": f"PO-{len(st.session_state.po_list)+1:03d}",
-            "Vendor": vendor,
-            "Item": item_name,
-            "Total": f"Rp {total:,.0f}",
-            "Status": status
-        }
-        st.session_state.po_list.append(new_po)
-        st.success(f"PO Berhasil Diajukan! Status: {status}")
-
-    st.subheader("Riwayat PO")
-    st.table(pd.DataFrame(st.session_state.po_list))
-
-# --- HALAMAN INVENTORY ---
-elif menu == "Inventory Control":
-    st.header("Manajemen Inventori")
-    df_inv = pd.DataFrame(st.session_state.inventory)
-    st.dataframe(df_inv, use_container_width=True)
-    
-    st.info("Catatan: Data di atas disimulasikan sesuai dengan alur ROP (Reorder Point) yang telah kita bahas.")
+    if not approved_prs:
+        st.write("Belum ada PR yang disetujui untuk dijadikan PO.")
+    else:
+        selected_pr_id = st.selectbox("Pilih PR untuk Penerimaan Barang (GR)", [p['ID_PR'] for p in approved_prs])
+        if st.button("Terima Barang (GR)"):
+            for i, p in enumerate(st.session_state.pr_data):
+                if p['ID_PR'] == selected_pr_id:
+                    # Update Stok
+                    sku = p['SKU']
+                    st.session_state.inventory[sku] = st.session_state.inventory.get(sku, 0) + p['Qty']
+                    st.session_state.pr_data[i]['Status'] = "Received (Selesai)"
+                    st.success(f"Stok {sku} berhasil ditambah sebanyak {p['Qty']}!")
+                    st.rerun()
