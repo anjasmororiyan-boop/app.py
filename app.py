@@ -2,178 +2,182 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Konfigurasi Halaman
-st.set_page_config(page_title="ERP Business Suite V4 - Precision Costing", layout="wide")
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(page_title="ERP Business Suite V5 - Dynamic Master", layout="wide")
 
-# --- FUNGSI FORMATTING CUSTOM ---
-def format_money(value):
-    """Format angka dengan separator ribuan dan 5 desimal"""
-    return "{:,.5f}".format(value).replace(",", "X").replace(".", ",").replace("X", ".")
+# --- CUSTOM FORMATTING ---
+def format_num(val):
+    return "{:,.5f}".format(val).replace(",", "X").replace(".", ",").replace("X", ".")
 
-# --- INITIAL DATA (SESSION STATE) ---
-if 'master_items' not in st.session_state:
-    st.session_state.master_items = pd.DataFrame([
-        {"SKU": "BRG001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Min_Stok": 50.00000},
-        {"SKU": "BRG002", "Nama": "Minyak Goreng", "Satuan": "Liter", "Min_Stok": 20.00000}
-    ])
+# --- INITIALIZING SESSION STATES ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 
-if 'inventory' not in st.session_state:
-    st.session_state.inventory = {"BRG001": 10.00000, "BRG002": 5.00000}
+# Inisialisasi Data Master Dinamis
+default_states = {
+    'master_units': ["Kg", "Liter", "Pcs", "Box"],
+    'expense_categories': ["Gaji", "Listrik/Air", "Sewa", "Marketing"],
+    'master_items': pd.DataFrame([
+        {"SKU": "BRG001", "Nama": "Espresso Coffee", "Satuan": "Kg", "Harga_Jual": 25000.0, "Stok": 100.0, "Min_Stok": 10.0}
+    ]),
+    'promos': pd.DataFrame([{"Nama_Promo": "No Promo", "Diskon_Persen": 0.0, "Diskon_Nominal": 0.0}]),
+    'inventory': {"BRG001": 100.0},
+    'pr_data': [],
+    'sales_data': [],
+    'expenses_data': [],
+    'pos_transactions': [],
+    'cash_session': {"modal_awal": 0.0, "status": "Closed"}
+}
 
-if 'pr_data' not in st.session_state:
-    st.session_state.pr_data = []
+for key, val in default_states.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
-if 'sales_data' not in st.session_state:
-    st.session_state.sales_data = []
+# --- LOGIN SYSTEM ---
+if not st.session_state.logged_in:
+    st.title("🔐 Login ERP & POS System")
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button("Login"):
+            if username == "admin" and password == "admin123":
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Gunakan admin/admin123")
+    st.stop()
 
-if 'expenses_data' not in st.session_state:
-    st.session_state.expenses_data = []
-
-# --- UI SIDEBAR ---
-st.sidebar.title("ERP Precision Suite V4")
+# --- SIDEBAR NAVIGASI ---
+st.sidebar.title("ERP V5 Dynamic")
 menu = st.sidebar.radio("Navigasi", [
     "Dashboard", 
-    "Master Item", 
+    "Master Pengaturan (Unit/Expense)", 
+    "Master Data Barang & Promo", 
+    "POS (Kasir)", 
     "Procurement (PR/PO/GR)", 
-    "Sales & Revenue", 
-    "Expenses (Biaya)", 
     "Financial Report"
 ])
 
 # --- 1. DASHBOARD ---
 if menu == "Dashboard":
-    st.header("📊 Executive Summary (Precision Mode)")
-    total_sales = sum(s['Total'] for s in st.session_state.sales_data)
-    total_costs = sum(p['Harga'] * p['Qty_GR'] for p in st.session_state.pr_data if p['Status'] == "Closed (Received)")
-    total_opex = sum(e['Nominal'] for e in st.session_state.expenses_data)
-    
+    st.header("📊 Ringkasan Bisnis")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Penjualan", format_money(total_sales))
-    c2.metric("Total HPP (Procurement)", format_money(total_costs))
-    c3.metric("Net Profit Est.", format_money(total_sales - total_costs - total_opex))
+    rev = sum(t['Net_Total'] for t in st.session_state.pos_transactions)
+    exp = sum(e['Nominal'] for e in st.session_state.expenses_data)
+    c1.metric("Penjualan POS", f"Rp {format_num(rev)}")
+    c2.metric("Total Biaya (OPEX)", f"Rp {format_num(exp)}")
+    c3.metric("Stok Item", len(st.session_state.master_items))
 
-    st.subheader("📦 Inventory Alert")
-    inventory_list = []
-    for _, row in st.session_state.master_items.iterrows():
-        current_stok = st.session_state.inventory.get(row['SKU'], 0)
-        inventory_list.append({
-            "Item": row['Nama'], 
-            "Stok Saat Ini": format_money(current_stok), 
-            "Batas Minimum": format_money(row['Min_Stok'])
-        })
-    st.table(pd.DataFrame(inventory_list))
-
-# --- 2. MASTER ITEM ---
-elif menu == "Master Item":
-    st.header("📦 Master Data Barang")
-    with st.form("fm_item"):
-        col_m1, col_m2 = st.columns(2)
-        n_sku = col_m1.text_input("SKU")
-        n_nama = col_m1.text_input("Nama Barang")
-        n_satuan = col_m2.selectbox("Satuan", ["Kg", "Liter", "Pcs", "Box"])
-        n_min = col_m2.number_input("Minimum Stok (5 Desimal)", format="%.5f")
-        if st.form_submit_button("Simpan Item"):
-            new_row = {"SKU": n_sku, "Nama": n_nama, "Satuan": n_satuan, "Min_Stok": n_min}
-            st.session_state.master_items = pd.concat([st.session_state.master_items, pd.DataFrame([new_row])], ignore_index=True)
-            st.rerun()
+# --- 2. MASTER PENGATURAN (UNIT & EXPENSE) ---
+elif menu == "Master Pengaturan (Unit/Expense)":
+    st.header("⚙️ Pengaturan Satuan & Kategori Biaya")
     
-    # Format tabel master untuk display
-    display_master = st.session_state.master_items.copy()
-    display_master['Min_Stok'] = display_master['Min_Stok'].apply(format_money)
-    st.table(display_master)
+    col_u, col_e = st.columns(2)
+    
+    with col_u:
+        st.subheader("Manage Units (Satuan)")
+        new_unit = st.text_input("Tambah Satuan Baru (misal: Pack)")
+        if st.button("Simpan Satuan"):
+            if new_unit and new_unit not in st.session_state.master_units:
+                st.session_state.master_units.append(new_unit)
+                st.success(f"Satuan {new_unit} ditambah.")
+                st.rerun()
+        st.write("**Daftar Satuan saat ini:**")
+        st.write(", ".join(st.session_state.master_units))
 
-# --- 3. PROCUREMENT (PR/PO/GR) ---
-elif menu == "Procurement (PR/PO/GR)":
-    st.header("🛒 Procurement Workflow")
-    tab1, tab2, tab3 = st.tabs(["Create PR", "Approval", "PO & Goods Receipt"])
+    with col_e:
+        st.subheader("Manage Expense Categories")
+        new_cat = st.text_input("Tambah Kategori Biaya (misal: Parkir)")
+        if st.button("Simpan Kategori"):
+            if new_cat and new_cat not in st.session_state.expense_categories:
+                st.session_state.expense_categories.append(new_cat)
+                st.success(f"Kategori {new_cat} ditambah.")
+                st.rerun()
+        st.write("**Daftar Kategori saat ini:**")
+        st.write(", ".join(st.session_state.expense_categories))
+
+# --- 3. MASTER DATA BARANG & PROMO ---
+elif menu == "Master Data Barang & Promo":
+    tab1, tab2 = st.tabs(["Master Items", "Master Promos"])
     
     with tab1:
-        with st.form("fm_pr"):
-            u_item = st.selectbox("Pilih Barang", st.session_state.master_items['Nama'].tolist())
-            u_sku = st.session_state.master_items[st.session_state.master_items['Nama'] == u_item]['SKU'].values[0]
-            u_qty = st.number_input("Jumlah Pesanan", format="%.5f")
-            u_price = st.number_input("Harga Satuan (Rp)", format="%.5f")
-            if st.form_submit_button("Ajukan PR"):
-                st.session_state.pr_data.append({
-                    "ID": f"PR-{datetime.now().strftime('%y%m%d%H%M')}",
-                    "SKU": u_sku, "Item": u_item, "Qty_PO": u_qty, "Qty_GR": 0.00000,
-                    "Harga": u_price, "Total": u_qty * u_price, "Status": "Pending"
-                })
-        
-        if st.session_state.pr_data:
-            df_pr = pd.DataFrame(st.session_state.pr_data)
-            df_pr['Harga'] = df_pr['Harga'].apply(format_money)
-            df_pr['Total'] = df_pr['Total'].apply(format_money)
-            st.table(df_pr)
+        with st.form("add_item"):
+            c1, c2 = st.columns(2)
+            n_sku = c1.text_input("SKU")
+            n_nama = c1.text_input("Nama")
+            # MENGGUNAKAN SATUAN DINAMIS
+            n_satuan = c2.selectbox("Pilih Satuan", st.session_state.master_units)
+            n_harga = c2.number_input("Harga Jual", format="%.5f")
+            n_min = c2.number_input("Min Stok", format="%.5f")
+            if st.form_submit_button("Simpan Item"):
+                new_item = {"SKU": n_sku, "Nama": n_nama, "Satuan": n_satuan, "Harga_Jual": n_harga, "Stok": 0.0, "Min_Stok": n_min}
+                st.session_state.master_items = pd.concat([st.session_state.master_items, pd.DataFrame([new_item])], ignore_index=True)
+                st.rerun()
+        st.table(st.session_state.master_items)
 
-    with tab2:
-        for i, pr in enumerate(st.session_state.pr_data):
-            if pr['Status'] == "Pending":
-                st.write(f"**{pr['ID']}** - {pr['Item']} - Rp {format_money(pr['Total'])}")
-                if st.button(f"Approve {pr['ID']}", key=f"app_{i}"):
-                    st.session_state.pr_data[i]['Status'] = "Approved"
-                    st.rerun()
+# --- 4. POS (KASIR) ---
+elif menu == "POS (Kasir)":
+    st.header("🛒 Kasir POS")
+    if st.session_state.cash_session['status'] == "Closed":
+        modal = st.number_input("Modal Awal", format="%.5f")
+        if st.button("Buka Sesi Kasir"):
+            st.session_state.cash_session = {"modal_awal": modal, "status": "Open"}
+            st.rerun()
+    else:
+        # Logika Kasir sama seperti sebelumnya, namun menggunakan format desimal presisi
+        items = st.session_state.master_items['Nama'].tolist()
+        sel_item = st.selectbox("Item", items)
+        qty = st.number_input("Quantity", min_value=0.00001, format="%.5f")
+        if st.button("Tambah Transaksi"):
+            price = st.session_state.master_items[st.session_state.master_items['Nama'] == sel_item]['Harga_Jual'].values[0]
+            st.session_state.pos_transactions.append({
+                "Waktu": datetime.now(), "Item": sel_item, "Qty": qty, "Net_Total": qty * price
+            })
+            st.success("Tercatat.")
+        st.table(pd.DataFrame(st.session_state.pos_transactions).tail(5))
 
-    with tab3:
-        approved = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
-        if approved:
-            sel_id = st.selectbox("Pilih PO untuk Penerimaan (GR)", [p['ID'] for p in approved])
-            with st.form("gr_form"):
-                gr_qty = st.number_input("Jumlah Diterima Fisik", format="%.5f")
-                if st.form_submit_button("Konfirmasi Penerimaan (GR)"):
-                    for i, p in enumerate(st.session_state.pr_data):
-                        if p['ID'] == sel_id:
-                            st.session_state.inventory[p['SKU']] += gr_qty
-                            st.session_state.pr_data[i]['Qty_GR'] = gr_qty
-                            st.session_state.pr_data[i]['Status'] = "Closed (Received)"
-                            st.rerun()
-
-# --- 4. SALES & REVENUE ---
-elif menu == "Sales & Revenue":
-    st.header("💰 Input Penjualan")
-    with st.form("sales_form"):
-        s_date = st.date_input("Tanggal Penjualan")
-        s_desc = st.text_input("Detail Transaksi")
-        s_total = st.number_input("Total Penjualan (Rp)", format="%.5f")
-        if st.form_submit_button("Simpan Penjualan"):
-            st.session_state.sales_data.append({"Tanggal": s_date, "Keterangan": s_desc, "Total": s_total})
-            st.success("Data Penjualan Tersimpan")
+# --- 5. PROCUREMENT (PR/PO/GR) ---
+elif menu == "Procurement (PR/PO/GR)":
+    st.header("📦 Procurement Alur")
+    with st.form("pr_form"):
+        p_item = st.selectbox("Barang", st.session_state.master_items['Nama'].tolist())
+        p_qty = st.number_input("Qty Beli", format="%.5f")
+        p_prc = st.number_input("Harga Satuan Beli", format="%.5f")
+        if st.form_submit_button("Submit PR"):
+            st.session_state.pr_data.append({
+                "ID": f"PR-{datetime.now().strftime('%M%S')}",
+                "Item": p_item, "Qty": p_qty, "Harga": p_prc, "Status": "Approved"
+            })
     
-    if st.session_state.sales_data:
-        df_sales = pd.DataFrame(st.session_state.sales_data)
-        df_sales['Total'] = df_sales['Total'].apply(format_money)
-        st.table(df_sales)
-
-# --- 5. EXPENSES ---
-elif menu == "Expenses (Biaya)":
-    st.header("💸 Biaya Operasional")
-    with st.form("exp_form"):
-        e_date = st.date_input("Tanggal")
-        e_cat = st.selectbox("Kategori", ["Gaji", "Listrik/Air", "Sewa", "Marketing", "Lain-lain"])
-        e_val = st.number_input("Nominal (Rp)", format="%.5f")
-        if st.form_submit_button("Simpan Biaya"):
-            st.session_state.expenses_data.append({"Tanggal": e_date, "Kategori": e_cat, "Nominal": e_val})
-            st.success("Biaya Tersimpan")
-    
-    if st.session_state.expenses_data:
-        df_exp = pd.DataFrame(st.session_state.expenses_data)
-        df_exp['Nominal'] = df_exp['Nominal'].apply(format_money)
-        st.table(df_exp)
+    st.subheader("Penerimaan Barang (GR)")
+    # Simulasi GR Langsung untuk Test
+    for i, pr in enumerate(st.session_state.pr_data):
+        if pr['Status'] == "Approved":
+            if st.button(f"Post GR untuk {pr['ID']} ({pr['Item']})"):
+                sku = st.session_state.master_items[st.session_state.master_items['Nama'] == pr['Item']]['SKU'].values[0]
+                idx = st.session_state.master_items[st.session_state.master_items['SKU'] == sku].index[0]
+                st.session_state.master_items.at[idx, 'Stok'] += pr['Qty']
+                st.session_state.pr_data[i]['Status'] = "Closed"
+                st.rerun()
 
 # --- 6. FINANCIAL REPORT ---
 elif menu == "Financial Report":
-    st.header("📈 Laporan Laba Rugi (Precision)")
+    st.header("📈 Laporan Laba Rugi")
     
-    rev = sum(s['Total'] for s in st.session_state.sales_data)
-    cogs = sum(p['Harga'] * p['Qty_GR'] for p in st.session_state.pr_data if p['Status'] == "Closed (Received)")
+    # Pencatatan Biaya dengan Kategori Dinamis
+    with st.expander("Input Biaya Baru"):
+        with st.form("exp_form"):
+            # MENGGUNAKAN KATEGORI DINAMIS
+            e_cat = st.selectbox("Kategori Biaya", st.session_state.expense_categories)
+            e_nom = st.number_input("Nominal", format="%.5f")
+            if st.form_submit_button("Simpan Biaya"):
+                st.session_state.expenses_data.append({"Kategori": e_cat, "Nominal": e_nom})
+                st.rerun()
+
+    rev = sum(t['Net_Total'] for t in st.session_state.pos_transactions)
     opex = sum(e['Nominal'] for e in st.session_state.expenses_data)
-    net_profit = rev - cogs - opex
     
-    st.markdown("---")
-    st.subheader("Statement of Profit or Loss")
-    st.write(f"**Total Pendapatan (Sales):** Rp {format_money(rev)}")
-    st.write(f"**Harga Pokok Penjualan (HPP):** (Rp {format_money(cogs)})")
-    st.write(f"**Total Biaya Operasional (OPEX):** (Rp {format_money(opex)})")
-    st.markdown("---")
-    color = "green" if net_profit >= 0 else "red"
-    st.markdown(f"## **Laba Bersih (Net Profit):** :{color}[Rp {format_money(net_profit)}]")
+    st.divider()
+    st.write(f"**Total Revenue:** Rp {format_num(rev)}")
+    st.write(f"**Total OPEX:** (Rp {format_num(opex)})")
+    st.subheader(f"Estimasi Laba Bersih: Rp {format_num(rev - opex)}")
