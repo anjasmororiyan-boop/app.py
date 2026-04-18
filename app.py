@@ -77,28 +77,67 @@ if menu == "Dashboard":
     st.subheader("📦 Posisi Inventaris")
     st.table(st.session_state.master_items[['SKU', 'Nama', 'Satuan', 'Stok']])
 
-# --- 2. MASTER DATA ---
-elif menu == "Master Data":
-    st.header("⚙️ Master Data Management")
-    t1, t2 = st.tabs(["Master Items", "Settings (Unit/Expense)"])
-    with t1:
+# --- 2. MASTER DATA MANAGEMENT (FIXED & COMPLETE) ---
+elif menu == "Master Data Management":
+    st.header("⚙️ Pusat Kendali Master Data")
+    
+    t_item, t_unit, t_exp = st.tabs(["📦 Master Barang", "📏 Satuan (Units)", "💸 Kategori Biaya"])
+    
+    with t_item:
+        st.subheader("Pengaturan Produk & Harga")
         with st.expander("➕ Tambah / Edit Item"):
             with st.form("fm_item"):
                 e_sku = st.text_input("SKU")
                 e_nama = st.text_input("Nama Barang")
-                e_satuan = st.selectbox("Satuan", st.session_state.master_units)
+                e_satuan = st.selectbox("Satuan Default", st.session_state.master_units)
                 e_harga = st.number_input("Harga Jual", format="%.5f")
-                if st.form_submit_button("Simpan"):
+                e_min = st.number_input("Min Stok", format="%.5f")
+                if st.form_submit_button("Simpan Data"):
                     mask = st.session_state.master_items['SKU'] == e_sku
                     if mask.any():
-                        st.session_state.master_items.loc[mask, ['Nama', 'Satuan', 'Harga_Jual']] = [e_nama, e_satuan, e_harga]
+                        st.session_state.master_items.loc[mask, ['Nama', 'Satuan', 'Harga_Jual', 'Min_Stok']] = [e_nama, e_satuan, e_harga, e_min]
                     else:
-                        new_row = {"SKU": e_sku, "Nama": e_nama, "Satuan": e_satuan, "Harga_Jual": e_harga, "Stok": 0.0, "Min_Stok": 0.0}
+                        new_row = {"SKU": e_sku, "Nama": e_nama, "Satuan": e_satuan, "Harga_Jual": e_harga, "Stok": 0.0, "Min_Stok": e_min}
                         st.session_state.master_items = pd.concat([st.session_state.master_items, pd.DataFrame([new_row])], ignore_index=True)
                     st.rerun()
-        st.table(st.session_state.master_items)
+        
+        # Tabel View dengan Fitur Hapus
+        for i, row in st.session_state.master_items.iterrows():
+            c1, c2 = st.columns([5, 1])
+            c1.write(f"**{row['SKU']}** | {row['Nama']} ({row['Satuan']}) | Harga: {smart_format(row['Harga_Jual'])}")
+            if c2.button("🗑️", key=f"del_it_{i}"):
+                st.session_state.master_items = st.session_state.master_items.drop(i).reset_index(drop=True); st.rerun()
 
-# --- 3. PROCUREMENT (PR/GR) ---
+    with t_unit:
+        st.subheader("Pengaturan Satuan Unit")
+        with st.form("fm_unit"):
+            new_u = st.text_input("Nama Satuan Baru (misal: Gram, Dus, Pack)")
+            if st.form_submit_button("Tambah Satuan"):
+                if new_u and new_u not in st.session_state.master_units:
+                    st.session_state.master_units.append(new_u); st.rerun()
+        
+        st.write("**Daftar Satuan Aktif:**")
+        for idx, u in enumerate(st.session_state.master_units):
+            col_ua, col_ub = st.columns([4, 1])
+            col_ua.info(u)
+            if col_ub.button("Hapus", key=f"del_u_{idx}"):
+                st.session_state.master_units.pop(idx); st.rerun()
+
+    with t_exp:
+        st.subheader("Pengaturan Kategori Biaya (OPEX)")
+        with st.form("fm_exp_cat"):
+            new_cat = st.text_input("Nama Kategori Biaya Baru")
+            if st.form_submit_button("Tambah Kategori"):
+                if new_cat and new_cat not in st.session_state.expense_categories:
+                    st.session_state.expense_categories.append(new_cat); st.rerun()
+        
+        st.write("**Daftar Kategori Biaya Aktif:**")
+        for idx, ex in enumerate(st.session_state.expense_categories):
+            col_ea, col_eb = st.columns([4, 1])
+            col_ea.warning(ex)
+            if col_eb.button("Hapus", key=f"del_ex_{idx}"):
+                st.session_state.expense_categories.pop(idx); st.rerun()
+                # --- 3. PROCUREMENT (PR/GR) ---
 elif menu == "Procurement (PR/GR)":
     st.header("🛒 Pengadaan Barang")
     with st.expander("📝 Form Purchase Requisition"):
@@ -227,3 +266,4 @@ elif menu == "Laporan Keuangan":
             if st.form_submit_button("Catat Biaya"):
                 st.session_state.expenses_data.append({"Tanggal": datetime.now().strftime("%Y-%m-%d"), "Kategori": c, "Nominal": n})
                 st.rerun()
+
