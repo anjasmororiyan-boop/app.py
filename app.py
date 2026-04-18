@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="ERP V11 - Professional Finance", layout="wide")
+st.set_page_config(page_title="ERP V12 - Full Master Control", layout="wide")
 
 # --- SMART FORMATTING FUNCTION ---
 def smart_format(val):
@@ -30,7 +30,7 @@ default_states = {
     'pr_data': [],
     'pos_transactions': [],
     'expenses_data': [],
-    'payments_data': [], # Riwayat pembayaran ke supplier
+    'payments_data': [],
     'cash_session': {"modal_awal": 0.0, "status": "Closed"}
 }
 
@@ -50,10 +50,10 @@ if not st.session_state.logged_in:
                 st.rerun()
     st.stop()
 
-# --- SIDEBAR NAVIGASI ---
+# --- SIDEBAR ---
 menu = st.sidebar.radio("Navigasi Utama", [
     "Dashboard", 
-    "Master Data", 
+    "Master Data Management", 
     "Procurement (PR/GR)", 
     "Pembayaran Hutang",
     "POS (Kasir)", 
@@ -63,19 +63,12 @@ menu = st.sidebar.radio("Navigasi Utama", [
 
 # --- 1. DASHBOARD ---
 if menu == "Dashboard":
-    st.header("📊 Ringkasan Eksekutif")
-    c1, c2, c3, c4 = st.columns(4)
+    st.header("📊 Dashboard")
     rev = sum(t['Net_Total'] for t in st.session_state.pos_transactions)
     exp = sum(e['Nominal'] for e in st.session_state.expenses_data)
-    paid_purchases = sum(p['Total_Bayar'] for p in st.session_state.payments_data)
-    
-    c1.metric("Revenue POS", f"Rp {smart_format(rev)}")
-    c2.metric("Total Biaya (OPEX)", f"Rp {smart_format(exp)}")
-    c3.metric("Kas Keluar (Pembelian)", f"Rp {smart_format(paid_purchases)}")
-    c4.metric("Stok Item", len(st.session_state.master_items))
-    st.divider()
-    st.subheader("📦 Posisi Inventaris")
-    st.table(st.session_state.master_items[['SKU', 'Nama', 'Satuan', 'Stok']])
+    st.metric("Estimasi Profit", f"Rp {smart_format(rev - exp)}")
+    st.subheader("📦 Stok Barang")
+    st.table(st.session_state.master_items)
 
 # --- 2. MASTER DATA MANAGEMENT (FIXED & COMPLETE) ---
 elif menu == "Master Data Management":
@@ -137,36 +130,37 @@ elif menu == "Master Data Management":
             col_ea.warning(ex)
             if col_eb.button("Hapus", key=f"del_ex_{idx}"):
                 st.session_state.expense_categories.pop(idx); st.rerun()
-                # --- 3. PROCUREMENT (PR/GR) ---
+
+# --- 3. PROCUREMENT (PR/GR) ---
 elif menu == "Procurement (PR/GR)":
-    st.header("🛒 Pengadaan Barang")
-    with st.expander("📝 Form Purchase Requisition"):
-        with st.form("pr_f"):
-            it_name = st.selectbox("Item", st.session_state.master_items['Nama'].tolist())
-            it_unit = st.session_state.master_items[st.session_state.master_items['Nama'] == it_name].iloc[0]['Satuan']
-            st.info(f"Unit: {it_unit}")
-            q_pesan = st.number_input("Qty Pesanan", format="%.5f")
-            h_beli = st.number_input("Harga Satuan Beli", format="%.5f")
+    st.header("🛒 Procurement Control")
+    with st.expander("📝 Buat PR Baru"):
+        with st.form("pr_form"):
+            p_item = st.selectbox("Item", st.session_state.master_items['Nama'].tolist())
+            it_info = st.session_state.master_items[st.session_state.master_items['Nama'] == p_item].iloc[0]
+            st.info(f"Satuan: {it_info['Satuan']}") # Field Satuan Otomatis
+            p_qty = st.number_input("Qty Pesanan", format="%.5f")
+            p_prc = st.number_input("Harga Satuan Beli", format="%.5f")
             if st.form_submit_button("Submit"):
                 st.session_state.pr_data.append({
-                    "ID": f"PR-{datetime.now().strftime('%y%m%d%H%M')}", "Item": it_name, "Satuan": it_unit,
-                    "Qty_Pesanan": q_pesan, "Qty_Terima": 0.0, "Harga": h_beli, "Status": "Pending", "Paid": False
+                    "ID": f"PR-{datetime.now().strftime('%y%m%d%H%M')}", "Item": p_item, "Satuan": it_info['Satuan'],
+                    "Qty_Pesanan": p_qty, "Qty_Terima": 0.0, "Harga": p_prc, "Status": "Pending", "Paid": False
                 })
                 st.rerun()
-
+    
+    # Logic GR tetap sama seperti V11 (Input Qty Fisik)
     for i, pr in enumerate(st.session_state.pr_data):
         if pr['Status'] != "Closed":
-            c1, c2, c3 = st.columns([3, 2, 2])
-            c1.write(f"**{pr['ID']}** - {pr['Item']}")
+            st.write(f"**{pr['ID']}** - {pr['Item']}")
             if pr['Status'] == "Pending":
-                if c2.button("Approve", key=f"app_{i}"): st.session_state.pr_data[i]['Status'] = "Approved"; st.rerun()
+                if st.button("Approve", key=f"ap_{i}"): st.session_state.pr_data[i]['Status'] = "Approved"; st.rerun()
             elif pr['Status'] == "Approved":
-                q_fisik = c2.number_input("Qty Fisik", key=f"qf_{i}", format="%.5f")
-                if c3.button("Terima (GR)", key=f"gr_{i}"):
+                q_f = st.number_input("Qty Terima Fisik", key=f"qf_{i}", format="%.5f")
+                if st.button("Konfirmasi GR", key=f"gr_{i}"):
                     sku = st.session_state.master_items[st.session_state.master_items['Nama'] == pr['Item']]['SKU'].values[0]
                     idx = st.session_state.master_items[st.session_state.master_items['SKU'] == sku].index[0]
-                    st.session_state.master_items.at[idx, 'Stok'] += q_fisik
-                    st.session_state.pr_data[i]['Qty_Terima'] = q_fisik
+                    st.session_state.master_items.at[idx, 'Stok'] += q_f
+                    st.session_state.pr_data[i]['Qty_Terima'] = q_f
                     st.session_state.pr_data[i]['Status'] = "Closed"
                     st.rerun()
 
