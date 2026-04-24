@@ -371,9 +371,15 @@ else:
     elif menu == "POS (Penjualan)":
         st.header("💰 Kasir Penjualan")
         
+        # Inisialisasi session state untuk POS jika belum ada
+        if 'pos_transactions' not in st.session_state:
+            st.session_state.pos_transactions = []
+        if 'cash_session' not in st.session_state:
+            st.session_state.cash_session = {"modal_awal": 0.0, "status": "Closed"}
+
         if st.session_state.cash_session['status'] == "Closed":
             st.warning("Sesi Kasir belum dibuka.")
-            modal = st.number_input("Input Modal Awal (Starting Cash)", min_value=0.0, format="%.5f")
+            modal = st.number_input("Input Modal Awal (Cash in Drawer)", min_value=0.0, format="%.2f")
             if st.button("Buka Kasir"):
                 st.session_state.cash_session = {"modal_awal": modal, "status": "Open", "waktu": datetime.now()}
                 st.rerun()
@@ -382,21 +388,22 @@ else:
             
             with col_pos1:
                 st.subheader("Input Pesanan")
-                # FILTER: Hanya tampilkan menu yang 'Active'
+                # FILTER: Hanya tampilkan menu yang statusnya 'Active'
                 active_sales = st.session_state.master_penjualan[st.session_state.master_penjualan['Status'] == "Active"]
                 
                 if active_sales.empty:
-                    st.error("Tidak ada menu aktif. Silakan tambahkan di Master Data.")
+                    st.info("Tidak ada menu aktif. Silakan aktifkan di Master Data.")
                 else:
-                    with st.form("pos_form"):
+                    with st.form("pos_form", clear_on_submit=True):
                         s_item = st.selectbox("Pilih Menu", active_sales['Nama'].tolist())
-                        s_qty = st.number_input("Qty", min_value=0.1, format="%.5f")
+                        s_qty = st.number_input("Qty", min_value=0.1, format="%.2f")
                         if st.form_submit_button("Tambahkan ke Bill"):
                             it_sale = active_sales[active_sales['Nama'] == s_item].iloc[0]
                             st.session_state.pos_transactions.append({
                                 "Tanggal": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                 "Item": s_item,
                                 "Qty": s_qty,
+                                "Harga": it_sale['Harga_Jual'],
                                 "Total": s_qty * it_sale['Harga_Jual']
                             })
                             st.success(f"{s_item} ditambahkan.")
@@ -410,36 +417,36 @@ else:
                     grand_total_pos = df_bill['Total'].sum()
                     st.markdown(f"### Total: Rp {smart_format(grand_total_pos)}")
                     
-                    if st.button("Proses Closing & Simpan"):
+                    if st.button("Proses Closing & Selesai"):
                         st.session_state.cash_session['status'] = "Closed"
-                        st.success("Sesi Berhasil Ditutup.")
+                        st.success("Sesi Berhasil Ditutup & Transaksi Disimpan.")
                         st.rerun()
+                else:
+                    st.write("Belum ada pesanan.")
 
 # --- 5. LAPORAN KEUANGAN ---
     elif menu == "Laporan Keuangan":
         st.header("📑 Financial Reports")
         rep1, rep2, rep3 = st.tabs(["Profit & Loss", "Balance Sheet", "Cash Flow"])
         
-        # Perhitungan Dasar
+        # Perhitungan Ringkasan
         revenue = sum(t['Total'] for t in st.session_state.pos_transactions)
         opex = sum(e['Nominal'] for e in st.session_state.expenses_data)
         
         with rep1:
             st.subheader("Laporan Laba Rugi")
             c1, c2 = st.columns(2)
-            c1.write("**Pendapatan Penjualan**")
-            c2.write(f"Rp {smart_format(revenue)}")
-            c1.write("**Biaya Operasional (OPEX)**")
-            c2.write(f"(Rp {smart_format(opex)})")
+            c1.metric("Total Pendapatan", f"Rp {smart_format(revenue)}")
+            c2.metric("Total Pengeluaran (OPEX)", f"Rp {smart_format(opex)}", delta_color="inverse")
+            
+            net_profit = revenue - opex
             st.divider()
-            profit = revenue - opex
-            color = "green" if profit >= 0 else "red"
-            st.markdown(f"### Net Profit: :{color}[Rp {smart_format(profit)}]")
+            st.markdown(f"### Net Profit: **Rp {smart_format(net_profit)}**")
 
-            with st.expander("➕ Catat Biaya Baru"):
+            with st.expander("➕ Catat Pengeluaran Operasional (Log Biaya)"):
                 with st.form("fm_exp"):
-                    e_cat = st.selectbox("Kategori", st.session_state.expense_categories)
-                    e_nom = st.number_input("Nominal", format="%.5f")
+                    e_cat = st.selectbox("Kategori Biaya", st.session_state.expense_categories)
+                    e_nom = st.number_input("Nominal (Rp)", min_value=0.0, format="%.2f")
                     if st.form_submit_button("Simpan Biaya"):
                         st.session_state.expenses_data.append({
                             "Tanggal": datetime.now().strftime("%Y-%m-%d"),
@@ -449,18 +456,15 @@ else:
                         st.rerun()
 
         with rep2:
-            st.subheader("Neraca (Balance Sheet)")
-            # Estimasi Nilai Stok Bahan Baku
+            st.subheader("Neraca Ringkas (Balance Sheet)")
+            # Estimasi Nilai Stok Bahan Baku berdasarkan Stok yang ada
             inv_val = sum(row['Stok'] * 1000 for _, row in st.session_state.master_bahan_baku.iterrows())
             st.write(f"**Aset Lancar (Persediaan):** Rp {smart_format(inv_val)}")
-            st.write(f"**Kas di Tangan:** Rp {smart_format(revenue - opex)}")
+            st.write(f"**Kas (Net):** Rp {smart_format(revenue - opex)}")
 
         with rep3:
-            st.subheader("Arus Kas (Cash Flow)")
-            st.write(f"Kas Masuk (Sales): Rp {smart_format(revenue)}")
-            st.write(f"Kas Keluar (OPEX): (Rp {smart_format(opex)})")
+            st.subheader("Laporan Arus Kas (Cash Flow)")
+            st.write(f"💰 **Kas Masuk (Penjualan):** Rp {smart_format(revenue)}")
+            st.write(f"💸 **Kas Keluar (OPEX):** (Rp {smart_format(opex)})")
             st.divider()
-            st.write(f"**Net Cash Flow:** Rp {smart_format(revenue - opex)}")
-
-# --- END OF FILE ---
-
+            st.markdown(f"### Net Cash Flow: Rp {smart_format(revenue - opex)}")
