@@ -84,11 +84,12 @@ if menu == "Dashboard":
 elif menu == "Master Data Management":
     st.header("⚙️ Pusat Kendali Master Data")
     
-    # Pastikan baris ini sejajar dengan header di atas
+    # 1. Definisi Tabs
     t_raw, t_vendor, t_wh, t_cfg = st.tabs(["🌾 Bahan Baku", "🏢 Vendor", "🏠 Warehouse", "🛠️ Unit & Expense"])
     
     with t_raw:
         st.subheader("Manajemen Bahan Baku")
+
         # Gunakan expander untuk form agar rapi
         with st.expander("➕ Tambah / Edit Bahan Baku"):
             with st.form("fm_raw_edit"):
