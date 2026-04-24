@@ -322,8 +322,8 @@ else:
                         st.rerun()
 
         # TAMPILAN UNTUK PRINT (PO YANG SUDAH APPROVED)
-           st.divider()
-           st.subheader("🖨️ Dokumen PO Siap Cetak")
+        st.divider()
+        st.subheader("🖨️ Dokumen PO Siap Cetak")
            ready_po = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
         
         if ready_po:
