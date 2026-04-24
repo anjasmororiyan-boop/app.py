@@ -324,7 +324,7 @@ else:
         # TAMPILAN UNTUK PRINT (PO YANG SUDAH APPROVED)
         st.divider()
         st.subheader("🖨️ Dokumen PO Siap Cetak")
-           ready_po = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
+        ready_po = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
         
         if ready_po:
             selected_po_id = st.selectbox("Pilih PO untuk Dicetak", [p['ID'] for p in ready_po])
