@@ -368,7 +368,7 @@ else:
             """, unsafe_allow_html=True)
             st.caption("Gunakan Ctrl+P atau fitur browser 'Print to PDF' untuk menyimpan dokumen di atas.")
 # --- 4. POS (PENJUALAN) ---
-    elif menu == "POS (Penjualan)":
+elif menu == "POS (Penjualan)":
         st.header("💰 Kasir Penjualan")
         
         # Inisialisasi session state untuk POS jika belum ada
@@ -425,7 +425,7 @@ else:
                     st.write("Belum ada pesanan.")
 
 # --- 5. LAPORAN KEUANGAN ---
-    elif menu == "Laporan Keuangan":
+elif menu == "Laporan Keuangan":
         st.header("📑 Financial Reports")
         rep1, rep2, rep3 = st.tabs(["Profit & Loss", "Balance Sheet", "Cash Flow"])
         
