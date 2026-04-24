@@ -111,7 +111,41 @@ elif menu == "Master Data Management":
                     st.session_state.master_warehouses.append(wh_new)
                     st.rerun()
         st.write(st.session_state.master_warehouses)
+# --- BAGIAN SATUAN UNIT ---
+        with col_unit:
+            st.write("### 📏 Manage Units")
+            with st.form("add_unit_form", clear_on_submit=True):
+                new_u = st.text_input("Tambah Satuan Baru")
+                if st.form_submit_button("Tambah Unit"):
+                    if new_u and new_u not in st.session_state.master_units:
+                        st.session_state.master_units.append(new_u)
+                        st.rerun()
+            
+            # List Satuan dengan tombol hapus
+            for idx, u in enumerate(st.session_state.master_units):
+                ca, cb = st.columns([3, 1])
+                ca.write(f"- {u}")
+                if cb.button("🗑️", key=f"del_u_{idx}"):
+                    st.session_state.master_units.pop(idx)
+                    st.rerun()
 
+        # --- BAGIAN TIPE BIAYA ---
+        with col_exp:
+            st.write("### 💸 Manage Expense Types")
+            with st.form("add_exp_form", clear_on_submit=True):
+                new_e = st.text_input("Tambah Tipe Biaya Baru")
+                if st.form_submit_button("Tambah Biaya"):
+                    if new_e and new_e not in st.session_state.expense_categories:
+                        st.session_state.expense_categories.append(new_e)
+                        st.rerun()
+            
+            # List Biaya dengan tombol hapus
+            for idx, e in enumerate(st.session_state.expense_categories):
+                ca, cb = st.columns([3, 1])
+                ca.write(f"- {e}")
+                if cb.button("🗑️", key=f"del_e_{idx}"):
+                    st.session_state.expense_categories.pop(idx)
+                    st.rerun()
 # --- 3. PROCUREMENT (MULTI-ITEM & INTEGRATED) ---
 elif menu == "Procurement (Bahan Baku)":
     st.header("🛒 Create Purchase Requisition (PR)")
