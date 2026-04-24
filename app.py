@@ -301,7 +301,7 @@ else:
 
     # --- TAB 2: APPROVAL & MONITORING ---
         with tab_po:
-        st.subheader("Monitoring Approval")
+            st.subheader("Monitoring Approval")
         if not st.session_state.pr_data:
             st.info("Belum ada pengajuan PR.")
         else:
@@ -322,9 +322,9 @@ else:
                         st.rerun()
 
         # TAMPILAN UNTUK PRINT (PO YANG SUDAH APPROVED)
-        st.divider()
-        st.subheader("🖨️ Dokumen PO Siap Cetak")
-        ready_po = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
+           st.divider()
+           st.subheader("🖨️ Dokumen PO Siap Cetak")
+           ready_po = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
         
         if ready_po:
             selected_po_id = st.selectbox("Pilih PO untuk Dicetak", [p['ID'] for p in ready_po])
