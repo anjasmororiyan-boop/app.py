@@ -368,7 +368,7 @@ else:
             """, unsafe_allow_html=True)
             st.caption("Gunakan Ctrl+P atau fitur browser 'Print to PDF' untuk menyimpan dokumen di atas.")
 # --- 4. POS (INTEGRATED WITH SALES ITEMS) ---
-elif menu == "POS (Penjualan)":
+    elif menu == "POS (Penjualan)":
     st.header("💰 Kasir Penjualan")
     if st.session_state.cash_session['status'] == "Open":
         with st.form("pos_sale"):
@@ -387,6 +387,6 @@ elif menu == "POS (Penjualan)":
             st.rerun()
 
 # --- 5. FINANCES ---
-elif menu == "Laporan Keuangan":
+    elif menu == "Laporan Keuangan":
     st.header("📈 Laporan Keuangan")
     # Profit Loss, Balance Sheet, dll
