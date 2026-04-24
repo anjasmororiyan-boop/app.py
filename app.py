@@ -79,39 +79,41 @@ elif menu == "Master Data Management":
     t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
     
     with t_raw:
-        st.subheader("Master Bahan Baku")
+        st.subheader("Database Bahan Baku")
         with st.form("fm_raw"):
             c1, c2 = st.columns(2)
-            r_sku = c1.text_input("SKU")
-            r_nama = c1.text_input("Nama")
-            r_satuan = c2.selectbox("Satuan", st.session_state.master_units)
-            r_min = c2.number_input("Min Stok", format="%.5f")
-            if st.form_submit_button("Simpan"):
-                new_row = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min}
-                st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_row])], ignore_index=True)
+            r_sku = c1.text_input("SKU Bahan Baku")
+            r_nama = c1.text_input("Nama Bahan Baku")
+            r_satuan = c2.selectbox("Satuan Beli", st.session_state.master_units)
+            r_min = c2.number_input("Minimal Stok", format="%.5f")
+            if st.form_submit_button("Simpan Bahan Baku"):
+                new_raw = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min}
+                st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_raw])], ignore_index=True)
+                st.success(f"Berhasil menambah {r_nama}")
                 st.rerun()
         st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
 
-    with t_vendor:
-        st.subheader("Master Vendor")
-        with st.form("fm_vendor"):
-            v_new = st.text_input("Nama Vendor Baru")
-            if st.form_submit_button("Tambah Vendor"):
-                if v_new and v_new not in st.session_state.master_vendors:
-                    st.session_state.master_vendors.append(v_new)
-                    st.rerun()
-        st.write(st.session_state.master_vendors)
+    with t_sale:
+        st.subheader("Database Menu Jual")
+        with st.form("fm_sale"):
+            c1, c2 = st.columns(2)
+            s_sku = c1.text_input("SKU Produk Jual")
+            s_nama = c1.text_input("Nama Menu/Produk")
+            s_harga = c2.number_input("Harga Jual (Rp)", format="%.5f")
+            s_sat = c2.selectbox("Satuan Jual", st.session_state.master_units)
+            if st.form_submit_button("Simpan Menu Jual"):
+                new_sale = {"SKU": s_sku, "Nama": s_nama, "Satuan": s_sat, "Harga_Jual": s_harga}
+                st.session_state.master_penjualan = pd.concat([st.session_state.master_penjualan, pd.DataFrame([new_sale])], ignore_index=True)
+                st.success(f"Berhasil menambah {s_nama}")
+                st.rerun()
+        st.dataframe(st.session_state.master_penjualan, use_container_width=True)
 
-    with t_wh:
-        st.subheader("Master Warehouse / Gudang")
-        with st.form("fm_wh"):
-            wh_new = st.text_input("Nama Gudang Baru")
-            if st.form_submit_button("Tambah Gudang"):
-                if wh_new and wh_new not in st.session_state.master_warehouses:
-                    st.session_state.master_warehouses.append(wh_new)
-                    st.rerun()
-        st.write(st.session_state.master_warehouses)
-# --- BAGIAN SATUAN UNIT ---
+    with t_cfg:
+        st.subheader("Konfigurasi Satuan & Tipe Biaya")
+        
+        col_unit, col_exp = st.columns(2)
+        
+        # --- BAGIAN SATUAN UNIT ---
         with col_unit:
             st.write("### 📏 Manage Units")
             with st.form("add_unit_form", clear_on_submit=True):
@@ -146,6 +148,27 @@ elif menu == "Master Data Management":
                 if cb.button("🗑️", key=f"del_e_{idx}"):
                     st.session_state.expense_categories.pop(idx)
                     st.rerun()
+
+    with t_vendor:
+        st.subheader("Master Vendor")
+        with st.form("fm_vendor"):
+            v_new = st.text_input("Nama Vendor Baru")
+            if st.form_submit_button("Tambah Vendor"):
+                if v_new and v_new not in st.session_state.master_vendors:
+                    st.session_state.master_vendors.append(v_new)
+                    st.rerun()
+        st.write(st.session_state.master_vendors)
+
+    with t_wh:
+        st.subheader("Master Warehouse / Gudang")
+        with st.form("fm_wh"):
+            wh_new = st.text_input("Nama Gudang Baru")
+            if st.form_submit_button("Tambah Gudang"):
+                if wh_new and wh_new not in st.session_state.master_warehouses:
+                    st.session_state.master_warehouses.append(wh_new)
+                    st.rerun()
+        st.write(st.session_state.master_warehouses)
+
 # --- 3. PROCUREMENT (MULTI-ITEM & INTEGRATED) ---
 elif menu == "Procurement (Bahan Baku)":
     st.header("🛒 Create Purchase Requisition (PR)")
