@@ -381,7 +381,7 @@ elif menu == "POS (Penjualan)":
                     "Item": s_item, "Qty": s_qty, "Total": s_qty * it_sale['Harga_Jual']
                 })
                 st.rerun()
-else:
+    else:
         if st.button("Buka Kasir"):
             st.session_state.cash_session['status'] = "Open"
             st.rerun()
@@ -389,4 +389,7 @@ else:
 # --- 5. FINANCES ---
 elif menu == "Laporan Keuangan":
     st.header("📈 Laporan Keuangan")
-    # Profit Loss, Balance Sheet, dll
+    # Profit Loss, Balance Sheet, dll            
+
+
+
