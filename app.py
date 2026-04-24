@@ -1,9 +1,9 @@
-import streamlit as st
+mport streamlit as st
 import pandas as pd
 from datetime import datetime
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="ERP V16 - Professional Procurement", layout="wide")
+st.set_page_config(page_title="ERP V15 - Professional Procurement", layout="wide")
 
 # --- SMART FORMATTING FUNCTION ---
 def smart_format(val):
@@ -21,21 +21,23 @@ def smart_format(val):
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
+# State tambahan untuk Vendor, Warehouse, dan Multi-item
 default_states = {
     'master_units': ["Kg", "Liter", "Pcs", "Gram", "Box"],
     'expense_categories': ["Gaji", "Listrik/Air", "Sewa", "Marketing"],
-    'master_vendors': ["PT. Sumber Pangan", "UD. Makmur Jaya"],
-    'master_warehouses': ["Gudang Utama", "Central Kitchen"],
+    'master_vendors': ["PT. Sumber Pangan", "UD. Makmur Jaya", "Toko Bahan Kue ABC"],
+    'master_warehouses': ["Gudang Utama", "Central Kitchen", "Gudang Bahan Baku"],
     'master_bahan_baku': pd.DataFrame([
-        {"SKU": "SR-RM001", "Nama": "Telur Ayam", "Satuan": "Gram", "Stok": 0.0, "Min_Stok": 1000.0, "Status": "Active"}
+        {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0}
     ]),
     'master_penjualan': pd.DataFrame([
-        {"SKU": "SALE001", "Nama": "Roti Tawar", "Satuan": "Pcs", "Harga_Jual": 15000.0, "Status": "Active"}
+        {"SKU": "SALE001", "Nama": "Roti Tawar", "Satuan": "Pcs", "Harga_Jual": 15000.0}
     ]),
-    'pr_data': [], 
-    'pr_items_temp': [], 
+    'pr_data': [], # Database PR pusat
+    'pr_items_temp': [], # Daftar item sementara saat input PR
     'pos_transactions': [],
     'expenses_data': [],
+    'payments_data': [],
     'cash_session': {"modal_awal": 0.0, "status": "Closed"}
 }
 
@@ -52,7 +54,7 @@ if not st.session_state.logged_in:
         if st.form_submit_button("Login"):
             if u == "admin" and p == "admin123":
                 st.session_state.logged_in = True
-                st.session_state.username = u
+                st.session_state.username = u # Simpan untuk Requestor otomatis
                 st.rerun()
     st.stop()
 
@@ -60,35 +62,93 @@ if not st.session_state.logged_in:
 menu = st.sidebar.radio("Navigasi Utama", [
     "Dashboard", 
     "Master Data Management", 
-    "Procurement (PR Multi-Item)", 
+    "Procurement (Bahan Baku)", 
     "POS (Kasir)", 
     "Laporan Keuangan"
 ])
 
-# --- 2. MASTER DATA MANAGEMENT (EDIT & INACTIVE) ---
-if menu == "Master Data Management":
+# --- 1. DASHBOARD ---
+if menu == "Dashboard":
+    st.header("📊 Dashboard")
+    st.subheader("📦 Stok Bahan Baku Saat Ini")
+    st.table(st.session_state.master_bahan_baku)
+
+# --- 2. MASTER DATA MANAGEMENT ---
+elif menu == "Master Data Management":
     st.header("⚙️ Pusat Kendali Master Data")
-    t_raw, t_vendor, t_wh, t_cfg = st.tabs(["🌾 Bahan Baku", "🏢 Vendor", "🏠 Warehouse", "🛠️ Unit & Expense"])
+    t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
     
     with t_raw:
-        st.subheader("Manajemen Bahan Baku")
-        with st.expander("➕ Tambah / Edit Bahan Baku"):
-            with st.form("fm_raw_edit"):
-                c1, c2 = st.columns(2)
-                e_sku = c1.text_input("SKU (Input SKU lama untuk Update)")
-                e_nama = c1.text_input("Nama Bahan")
-                e_sat = c2.selectbox("Satuan", st.session_state.master_units)
-                e_min = c2.number_input("Min Stok", format="%.5f")
-                e_status = c2.selectbox("Status", ["Active", "Inactive"])
-                if st.form_submit_button("Simpan Data"):
-                    mask = st.session_state.master_bahan_baku['SKU'] == e_sku
-                    if mask.any():
-                        st.session_state.master_bahan_baku.loc[mask, ['Nama', 'Satuan', 'Min_Stok', 'Status']] = [e_nama, e_sat, e_min, e_status]
-                    else:
-                        new_row = {"SKU": e_sku, "Nama": e_nama, "Satuan": e_sat, "Stok": 0.0, "Min_Stok": e_min, "Status": e_status}
-                        st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_row])], ignore_index=True)
-                    st.rerun()
+        st.subheader("Database Bahan Baku")
+        with st.form("fm_raw"):
+            c1, c2 = st.columns(2)
+            r_sku = c1.text_input("SKU Bahan Baku")
+            r_nama = c1.text_input("Nama Bahan Baku")
+            r_satuan = c2.selectbox("Satuan Beli", st.session_state.master_units)
+            r_min = c2.number_input("Minimal Stok", format="%.5f")
+            if st.form_submit_button("Simpan Bahan Baku"):
+                new_raw = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min}
+                st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_raw])], ignore_index=True)
+                st.success(f"Berhasil menambah {r_nama}")
+                st.rerun()
         st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
+
+    with t_sale:
+        st.subheader("Database Menu Jual")
+        with st.form("fm_sale"):
+            c1, c2 = st.columns(2)
+            s_sku = c1.text_input("SKU Produk Jual")
+            s_nama = c1.text_input("Nama Menu/Produk")
+            s_harga = c2.number_input("Harga Jual (Rp)", format="%.5f")
+            s_sat = c2.selectbox("Satuan Jual", st.session_state.master_units)
+            if st.form_submit_button("Simpan Menu Jual"):
+                new_sale = {"SKU": s_sku, "Nama": s_nama, "Satuan": s_sat, "Harga_Jual": s_harga}
+                st.session_state.master_penjualan = pd.concat([st.session_state.master_penjualan, pd.DataFrame([new_sale])], ignore_index=True)
+                st.success(f"Berhasil menambah {s_nama}")
+                st.rerun()
+        st.dataframe(st.session_state.master_penjualan, use_container_width=True)
+
+    with t_cfg:
+        st.subheader("Konfigurasi Satuan & Tipe Biaya")
+        
+        col_unit, col_exp = st.columns(2)
+        
+        # --- BAGIAN SATUAN UNIT ---
+        with col_unit:
+            st.write("### 📏 Manage Units")
+            with st.form("add_unit_form", clear_on_submit=True):
+                new_u = st.text_input("Tambah Satuan Baru")
+                if st.form_submit_button("Tambah Unit"):
+                    if new_u and new_u not in st.session_state.master_units:
+                        st.session_state.master_units.append(new_u)
+                        st.rerun()
+            
+            # List Satuan dengan tombol hapus
+            for idx, u in enumerate(st.session_state.master_units):
+                ca, cb = st.columns([3, 1])
+                ca.write(f"- {u}")
+                if cb.button("🗑️", key=f"del_u_{idx}"):
+                    st.session_state.master_units.pop(idx)
+                    st.rerun()
+
+        # --- BAGIAN TIPE BIAYA ---
+        with col_exp:
+            st.write("### 💸 Manage Expense Types")
+            with st.form("add_exp_form", clear_on_submit=True):
+                new_e = st.text_input("Tambah Tipe Biaya Baru")
+                if st.form_submit_button("Tambah Biaya"):
+                    if new_e and new_e not in st.session_state.expense_categories:
+                        st.session_state.expense_categories.append(new_e)
+                        st.rerun()
+            
+            # List Biaya dengan tombol hapus
+            for idx, e in enumerate(st.session_state.expense_categories):
+                ca, cb = st.columns([3, 1])
+                ca.write(f"- {e}")
+                if cb.button("🗑️", key=f"del_e_{idx}"):
+                    st.session_state.expense_categories.pop(idx)
+                    st.rerun()
+
     with t_vendor:
         st.subheader("Master Vendor")
         with st.form("fm_vendor"):
