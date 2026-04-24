@@ -226,10 +226,10 @@ elif menu == "Procurement (Bahan Baku)":
         # Selectbox di luar form agar UI (Satuan & Kode) update otomatis saat item diganti
         active_items = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Status'] == "Active"]
 if active_items.empty:
-            st.warning("Tidak ada item aktif di Master Data.")
-        else:
-            p_item = st.selectbox("Pilih Bahan Baku", active_items['Nama'].tolist())
-            it_info = active_items[active_items['Nama'] == p_item].iloc[0]
+        st.warning("Tidak ada item aktif di Master Data.")
+else:
+        p_item = st.selectbox("Pilih Bahan Baku", active_items['Nama'].tolist())
+        it_info = active_items[active_items['Nama'] == p_item].iloc[0]
     
     # Ambil info dari active_items
     it_info = active_items[active_items['Nama'] == p_item_name].iloc[0]
