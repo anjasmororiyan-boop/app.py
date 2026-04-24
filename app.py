@@ -151,34 +151,35 @@ elif menu == "Procurement (Bahan Baku)":
     
     tab_pr, tab_po = st.tabs(["📝 Pengajuan PR", "📄 Approval & Dokumen PO"])
 
-    # --- TAB 1: PENGAJUAN PR ---
     with tab_pr:
         st.subheader("Form Purchase Requisition")
-        with st.form("pr_form_v14"):
-            # 1. Pilih Item dari Master Bahan Baku
-            p_item = st.selectbox("Pilih Bahan Baku", st.session_state.master_bahan_baku['Nama'].tolist())
-            
-            # 2. Ambil Info dari Master (Satuan & Harga Terakhir)
-            it_info = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Nama'] == p_item].iloc[0]
-            
-            # Cari harga terakhir di history (jika ada)
-            last_price = 0.0
-            history = [p for p in st.session_state.pr_data if p['Item'] == p_item and p['Status'] == 'Closed']
-            if history:
-                last_price = float(history[-1]['Harga'])
-            else:
-                # Jika belum pernah beli, bisa disetting default atau 0
-                last_price = 0.0
+        
+        # 1. Gunakan kolom di luar form untuk pemicu re-run otomatis saat pilih item
+        # Ini memastikan Satuan di bawahnya langsung berubah
+        p_item = st.selectbox(
+            "Pilih Bahan Baku", 
+            st.session_state.master_bahan_baku['Nama'].tolist(),
+            key="sb_procurement_item"
+        )
+        
+        # 2. Ambil Info secara Real-Time berdasarkan p_item yang dipilih di atas
+        it_info = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Nama'] == p_item].iloc[0]
+        
+        # Cari harga terakhir dari history
+        history = [p for p in st.session_state.pr_data if p['Item'] == p_item and p['Status'] == 'Closed']
+        last_price = float(history[-1]['Harga']) if history else 0.0
 
-            st.info(f"Satuan: {it_info['Satuan']} | Harga Terakhir: Rp {smart_format(last_price)}")
+        # TAMPILAN SATUAN (Yang tadinya bug, sekarang akan otomatis terupdate)
+        st.info(f"📦 Satuan Unit: **{it_info['Satuan']}** | 💰 Harga Terakhir: **Rp {smart_format(last_price)}**")
 
+        # 3. Form untuk input Qty dan Harga
+        with st.form("pr_form_fixed", clear_on_submit=True):
             col_q, col_p = st.columns(2)
-            p_qty = col_q.number_input("Quantity Dibutuhkan", min_value=0.0, format="%.5f")
-            p_prc = col_p.number_input("Harga Satuan (Rp)", value=last_price, format="%.5f")
+            p_qty = col_q.number_input(f"Quantity ({it_info['Satuan']})", min_value=0.0, format="%.5f")
+            p_prc = col_p.number_input("Harga Satuan Beli (Rp)", value=last_price, format="%.5f")
             
-            # 3. Hitung Total Amount
             total_amount = p_qty * p_prc
-            st.markdown(f"### Total Purchase: **Rp {smart_format(total_amount)}**")
+            st.markdown(f"### Total Estimasi: **Rp {smart_format(total_amount)}**")
             
             if st.form_submit_button("Submit Pengajuan PR"):
                 if p_qty <= 0:
@@ -195,7 +196,7 @@ elif menu == "Procurement (Bahan Baku)":
                         "Total": total_amount,
                         "Status": "Pending Approval"
                     })
-                    st.success("PR Berhasil Diajukan!")
+                    st.success(f"PR untuk {p_item} berhasil dikirim!")
                     st.rerun()
 
     # --- TAB 2: APPROVAL & PRINT PO ---
