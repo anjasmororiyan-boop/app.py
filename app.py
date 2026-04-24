@@ -28,10 +28,10 @@ default_states = {
     'master_vendors': ["PT. Sumber Pangan", "UD. Makmur Jaya", "Toko Bahan Kue ABC"],
     'master_warehouses': ["Gudang Utama", "Central Kitchen", "Gudang Bahan Baku"],
     'master_bahan_baku': pd.DataFrame([
-        {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0}
+        {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0, "Status": "Active"}
     ]),
     'master_penjualan': pd.DataFrame([
-        {"SKU": "SALE001", "Nama": "Roti Tawar", "Satuan": "Pcs", "Harga_Jual": 15000.0}
+        {"SKU": "SALE001", "Nama": "Roti Tawar", "Satuan": "Pcs", "Harga_Jual": 15000.0, "Status": "Active"}
     ]),
     'pr_data': [], # Database PR pusat
     'pr_items_temp': [], # Daftar item sementara saat input PR
@@ -79,17 +79,29 @@ elif menu == "Master Data Management":
     t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
     
     with t_raw:
-        st.subheader("Database Bahan Baku")
+    st.subheader("Master Bahan Baku")
+    with st.expander("➕ Tambah / Edit Bahan Baku"):
         with st.form("fm_raw"):
             c1, c2 = st.columns(2)
-            r_sku = c1.text_input("SKU Bahan Baku")
-            r_nama = c1.text_input("Nama Bahan Baku")
-            r_satuan = c2.selectbox("Satuan Beli", st.session_state.master_units)
-            r_min = c2.number_input("Minimal Stok", format="%.5f")
-            if st.form_submit_button("Simpan Bahan Baku"):
-                new_raw = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min}
-                st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_raw])], ignore_index=True)
-                st.success(f"Berhasil menambah {r_nama}")
+            r_sku = c1.text_input("SKU (Input SKU lama untuk Update)")
+            r_nama = c1.text_input("Nama")
+            r_satuan = c2.selectbox("Satuan", st.session_state.master_units)
+            r_min = c2.number_input("Min Stok", format="%.5f")
+            # TAMBAHKAN FIELD STATUS
+            r_status = c2.selectbox("Status", ["Active", "Inactive"]) 
+            
+            if st.form_submit_button("Simpan"):
+                # LOGIKA UPDATE (UPSERT)
+                mask = st.session_state.master_bahan_baku['SKU'] == r_sku
+                if mask.any():
+                    # Jika SKU sudah ada, update datanya
+                    st.session_state.master_bahan_baku.loc[mask, ['Nama', 'Satuan', 'Min_Stok', 'Status']] = [r_nama, r_satuan, r_min, r_status]
+                    st.success(f"Data {r_sku} berhasil diperbarui!")
+                else:
+                    # Jika SKU baru, tambah baris baru
+                    new_row = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min, "Status": r_status}
+                    st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_row])], ignore_index=True)
+                    st.success("Item baru berhasil ditambah!")
                 st.rerun()
         st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
 
@@ -198,11 +210,17 @@ elif menu == "Procurement (Bahan Baku)":
         st.subheader("📦 Item List")
         
         # Selectbox di luar form agar UI (Satuan & Kode) update otomatis saat item diganti
-        active_items = st.session_state.master_bahan_baku
-        p_item_name = st.selectbox("Pilih Bahan Baku", active_items['Nama'].tolist(), key="pr_item_selector")
-        
-        # Ambil detail dari master
-        it_info = active_items[active_items['Nama'] == p_item_name].iloc[0]
+        active_items = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Status'] == "Active"]
+
+if active_items.empty:
+    st.warning("Tidak ada bahan baku aktif yang tersedia.")
+else:
+    p_item_name = st.selectbox("Pilih Bahan Baku untuk ditambahkan", 
+                                active_items['Nama'].tolist(), # Gunakan list hasil filter
+                                key="pr_item_select")
+    
+    # Ambil info dari active_items
+    it_info = active_items[active_items['Nama'] == p_item_name].iloc[0]
         
         # Cari harga terakhir dari histori PR
         history = [p for p in st.session_state.pr_data if p.get('Item') == p_item_name]
