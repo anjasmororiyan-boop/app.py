@@ -84,8 +84,7 @@ if menu == "Dashboard":
 elif menu == "Master Data Management":
     st.header("⚙️ Pusat Kendali Master Data")
     t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
-    
-    with t_raw:
+  with t_raw:
     st.subheader("Manajemen Bahan Baku")
     with st.expander("➕ Tambah / Edit Bahan Baku"):
         with st.form("fm_raw_edit"):
@@ -110,7 +109,8 @@ elif menu == "Master Data Management":
                     st.success("Item Baru Berhasil Ditambahkan")
                 st.rerun()
     
-    st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
+    st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)  
+    
 
     with t_sale:
         st.subheader("Database Menu Jual")
