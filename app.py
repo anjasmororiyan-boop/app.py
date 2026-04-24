@@ -32,7 +32,7 @@ default_states = {
     'master_warehouses': pd.DataFrame([
         {"Nama": "Gudang Utama", "Status": "Active"},
         {"Nama": "Central Kitchen", "Status": "Active"},
-        {"Nama": "Gudang Bahan Baku"] "Status": "Active"},
+        {"Nama": "Gudang Bahan Baku", "Status": "Active"},
     ]),
     'master_bahan_baku': pd.DataFrame([
         {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0, "Status": "Active"}
