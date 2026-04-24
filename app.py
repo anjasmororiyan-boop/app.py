@@ -83,33 +83,39 @@ if menu == "Dashboard":
 # --- 2. MASTER DATA MANAGEMENT ---
 elif menu == "Master Data Management":
     st.header("⚙️ Pusat Kendali Master Data")
-    t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
-  with t_raw:
-    st.subheader("Manajemen Bahan Baku")
-    with st.expander("➕ Tambah / Edit Bahan Baku"):
-        with st.form("fm_raw_edit"):
-            c1, c2 = st.columns(2)
-            r_sku = c1.text_input("SKU (Gunakan SKU lama untuk Edit)")
-            r_nama = c1.text_input("Nama Bahan")
-            r_satuan = c2.selectbox("Satuan", st.session_state.master_units)
-            r_min = c2.number_input("Minimal Stok", format="%.5f")
-            r_status = c2.selectbox("Status", ["Active", "Inactive"]) # Fitur Inaktif
-            
-            if st.form_submit_button("Simpan Data"):
-                # Cek apakah SKU sudah ada di dataframe
-                mask = st.session_state.master_bahan_baku['SKU'] == r_sku
-                if mask.any():
-                    # UPDATE DATA
-                    st.session_state.master_bahan_baku.loc[mask, ['Nama', 'Satuan', 'Min_Stok', 'Status']] = [r_nama, r_satuan, r_min, r_status]
-                    st.success(f"Update Berhasil: {r_sku}")
-                else:
-                    # TAMBAH BARU
-                    new_data = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min, "Status": r_status}
-                    st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_data])], ignore_index=True)
-                    st.success("Item Baru Berhasil Ditambahkan")
-                st.rerun()
     
-    st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)  
+    # Pastikan baris ini sejajar dengan header di atas
+    t_raw, t_vendor, t_wh, t_cfg = st.tabs(["🌾 Bahan Baku", "🏢 Vendor", "🏠 Warehouse", "🛠️ Unit & Expense"])
+    
+    with t_raw:
+        st.subheader("Manajemen Bahan Baku")
+        # Gunakan expander untuk form agar rapi
+        with st.expander("➕ Tambah / Edit Bahan Baku"):
+            with st.form("fm_raw_edit"):
+                c1, c2 = st.columns(2)
+                r_sku = c1.text_input("SKU (Gunakan SKU lama untuk Edit)")
+                r_nama = c1.text_input("Nama Bahan")
+                r_satuan = c2.selectbox("Satuan", st.session_state.master_units)
+                r_min = c2.number_input("Minimal Stok", format="%.5f")
+                # FITUR INAKTIF: Tambahkan field status
+                r_status = c2.selectbox("Status", ["Active", "Inactive"]) 
+                
+                if st.form_submit_button("Simpan Data"):
+                    # Logika UPSERT (Update or Insert)
+                    mask = st.session_state.master_bahan_baku['SKU'] == r_sku
+                    if mask.any():
+                        # UPDATE jika SKU ditemukan
+                        st.session_state.master_bahan_baku.loc[mask, ['Nama', 'Satuan', 'Min_Stok', 'Status']] = [r_nama, r_satuan, r_min, r_status]
+                        st.success(f"Update Berhasil: {r_sku}")
+                    else:
+                        # INSERT jika SKU baru
+                        new_data = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min, "Status": r_status}
+                        st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_data])], ignore_index=True)
+                        st.success("Item Baru Berhasil Ditambahkan")
+                    st.rerun()
+        
+        # Menampilkan tabel master
+        st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
     
 
     with t_sale:
