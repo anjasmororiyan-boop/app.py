@@ -2,202 +2,122 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="ERP V13 - Fixed Master Config", layout="wide")
+# --- INITIALIZING ADDITIONAL SESSION STATES ---
+if 'master_vendors' not in st.session_state:
+    st.session_state.master_vendors = ["PT. Sumber Pangan", "UD. Makmur Jaya"]
+if 'master_warehouses' not in st.session_state:
+    st.session_state.master_warehouses = ["Gudang Utama", "Hub Kitchen Jakarta"]
+if 'pr_items_temp' not in st.session_state:
+    st.session_state.pr_items_temp = []
 
-# --- SMART FORMATTING FUNCTION ---
-def smart_format(val):
-    if val is None: return "0"
-    try:
-        val_float = float(val)
-        if val_float.is_integer():
-            return "{:,.0f}".format(val_float).replace(",", ".")
-        formatted = "{:,.5f}".format(val_float).rstrip('0').rstrip('.')
-        return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return str(val)
-
-# --- INITIALIZING SESSION STATES ---
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-default_states = {
-    'master_units': ["Kg", "Liter", "Pcs", "Gram", "Box"],
-    'expense_categories': ["Gaji", "Listrik/Air", "Sewa", "Marketing"],
-    'master_bahan_baku': pd.DataFrame([
-        {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0}
-    ]),
-    'master_penjualan': pd.DataFrame([
-        {"SKU": "SALE001", "Nama": "Roti Tawar", "Satuan": "Pcs", "Harga_Jual": 15000.0}
-    ]),
-    'pr_data': [],
-    'pos_transactions': [],
-    'expenses_data': [],
-    'payments_data': [],
-    'cash_session': {"modal_awal": 0.0, "status": "Closed"}
-}
-
-for key, val in default_states.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
-
-# --- LOGIN SYSTEM ---
-if not st.session_state.logged_in:
-    st.title("🔐 Login ERP Management")
-    with st.form("login_form"):
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.form_submit_button("Login"):
-            if u == "admin" and p == "admin123":
-                st.session_state.logged_in = True
-                st.rerun()
-            else:
-                st.error("Login Gagal. Gunakan admin/admin123")
-    st.stop()
-
-# --- SIDEBAR ---
-menu = st.sidebar.radio("Navigasi Utama", [
-    "Dashboard", 
-    "Master Data Management", 
-    "Procurement (Bahan Baku)", 
-    "POS (Kasir)", 
-    "Laporan Keuangan"
-])
-
-# --- 1. DASHBOARD ---
-if menu == "Dashboard":
-    st.header("📊 Stock & Sales Overview")
-    st.subheader("📦 Stok Bahan Baku (Raw Materials)")
-    st.table(st.session_state.master_bahan_baku)
-
-# --- 2. MASTER DATA MANAGEMENT (REPAIRED) ---
+# --- 2. MASTER DATA MANAGEMENT (TAMBAHAN VENDOR & WAREHOUSE) ---
 elif menu == "Master Data Management":
     st.header("⚙️ Pusat Kendali Master Data")
-    t_raw, t_sale, t_cfg = st.tabs(["🌾 Master Bahan Baku", "💰 Master Penjualan", "🛠️ Unit & Expense"])
+    t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
     
-    with t_raw:
-        st.subheader("Database Bahan Baku")
-        with st.form("fm_raw"):
-            c1, c2 = st.columns(2)
-            r_sku = c1.text_input("SKU Bahan Baku")
-            r_nama = c1.text_input("Nama Bahan Baku")
-            r_satuan = c2.selectbox("Satuan Beli", st.session_state.master_units)
-            r_min = c2.number_input("Minimal Stok", format="%.5f")
-            if st.form_submit_button("Simpan Bahan Baku"):
-                new_raw = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min}
-                st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_raw])], ignore_index=True)
-                st.success(f"Berhasil menambah {r_nama}")
-                st.rerun()
-        st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
+    # ... (Tab t_raw, t_sale, t_cfg tetap seperti sebelumnya)
 
-    with t_sale:
-        st.subheader("Database Menu Jual")
-        with st.form("fm_sale"):
-            c1, c2 = st.columns(2)
-            s_sku = c1.text_input("SKU Produk Jual")
-            s_nama = c1.text_input("Nama Menu/Produk")
-            s_harga = c2.number_input("Harga Jual (Rp)", format="%.5f")
-            s_sat = c2.selectbox("Satuan Jual", st.session_state.master_units)
-            if st.form_submit_button("Simpan Menu Jual"):
-                new_sale = {"SKU": s_sku, "Nama": s_nama, "Satuan": s_sat, "Harga_Jual": s_harga}
-                st.session_state.master_penjualan = pd.concat([st.session_state.master_penjualan, pd.DataFrame([new_sale])], ignore_index=True)
-                st.success(f"Berhasil menambah {s_nama}")
-                st.rerun()
-        st.dataframe(st.session_state.master_penjualan, use_container_width=True)
-
-    with t_cfg:
-        st.subheader("Konfigurasi Satuan & Tipe Biaya")
-        
-        col_unit, col_exp = st.columns(2)
-        
-        # --- BAGIAN SATUAN UNIT ---
-        with col_unit:
-            st.write("### 📏 Manage Units")
-            with st.form("add_unit_form", clear_on_submit=True):
-                new_u = st.text_input("Tambah Satuan Baru")
-                if st.form_submit_button("Tambah Unit"):
-                    if new_u and new_u not in st.session_state.master_units:
-                        st.session_state.master_units.append(new_u)
-                        st.rerun()
-            
-            # List Satuan dengan tombol hapus
-            for idx, u in enumerate(st.session_state.master_units):
-                ca, cb = st.columns([3, 1])
-                ca.write(f"- {u}")
-                if cb.button("🗑️", key=f"del_u_{idx}"):
-                    st.session_state.master_units.pop(idx)
+    with t_vendor:
+        st.subheader("Master Vendor")
+        with st.form("fm_vendor"):
+            v_name = st.text_input("Nama Vendor Baru")
+            if st.form_submit_button("Simpan Vendor"):
+                if v_name and v_name not in st.session_state.master_vendors:
+                    st.session_state.master_vendors.append(v_name)
                     st.rerun()
+        st.write(st.session_state.master_vendors)
 
-        # --- BAGIAN TIPE BIAYA ---
-        with col_exp:
-            st.write("### 💸 Manage Expense Types")
-            with st.form("add_exp_form", clear_on_submit=True):
-                new_e = st.text_input("Tambah Tipe Biaya Baru")
-                if st.form_submit_button("Tambah Biaya"):
-                    if new_e and new_e not in st.session_state.expense_categories:
-                        st.session_state.expense_categories.append(new_e)
-                        st.rerun()
-            
-            # List Biaya dengan tombol hapus
-            for idx, e in enumerate(st.session_state.expense_categories):
-                ca, cb = st.columns([3, 1])
-                ca.write(f"- {e}")
-                if cb.button("🗑️", key=f"del_e_{idx}"):
-                    st.session_state.expense_categories.pop(idx)
+    with t_wh:
+        st.subheader("Master Warehouse")
+        with st.form("fm_wh"):
+            wh_name = st.text_input("Nama Gudang Baru")
+            if st.form_submit_button("Simpan Gudang"):
+                if wh_name and wh_name not in st.session_state.master_warehouses:
+                    st.session_state.master_warehouses.append(wh_name)
                     st.rerun()
-# --- 3. PROCUREMENT (INTEGRATED WITH RAW MATERIALS) ---
+        st.write(st.session_state.master_warehouses)
+
+# --- 3. PROCUREMENT (MULTI-ITEM & INTEGRATED) ---
 elif menu == "Procurement (Bahan Baku)":
-    st.header("🛒 Pengadaan Bahan Baku (Procurement)")
+    st.header("🛒 Purchase Requisition (Multi-Item)")
     
-    tab_pr, tab_po = st.tabs(["📝 Pengajuan PR", "📄 Approval & Dokumen PO"])
+    # --- HEADER SECTION ---
+    with st.container(border=True):
+        col1, col2, col3 = st.columns(3)
+        pr_date = col1.date_input("Tanggal Transaksi", datetime.now(), disabled=True)
+        pr_vendor = col2.selectbox("Vendor Name", st.session_state.master_vendors)
+        pr_delivery = col3.date_input("Estimated Delivery")
 
-    with tab_pr:
-        st.subheader("Form Purchase Requisition")
-        
-        # 1. Gunakan kolom di luar form untuk pemicu re-run otomatis saat pilih item
-        # Ini memastikan Satuan di bawahnya langsung berubah
-        p_item = st.selectbox(
-            "Pilih Bahan Baku", 
-            st.session_state.master_bahan_baku['Nama'].tolist(),
-            key="sb_procurement_item"
-        )
-        
-        # 2. Ambil Info secara Real-Time berdasarkan p_item yang dipilih di atas
-        it_info = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Nama'] == p_item].iloc[0]
-        
-        # Cari harga terakhir dari history
-        history = [p for p in st.session_state.pr_data if p['Item'] == p_item and p['Status'] == 'Closed']
-        last_price = float(history[-1]['Harga']) if history else 0.0
+        col4, col5, col6 = st.columns(3)
+        pr_requestor = col4.text_input("Requestor", value="Admin (System)", disabled=True) # Sesuaikan dengan login user
+        pr_wh = col5.selectbox("Warehouse", st.session_state.master_warehouses)
+        pr_memo = col6.text_area("Memo / Catatan", placeholder="Keperluan produksi bakery...")
 
-        # TAMPILAN SATUAN (Yang tadinya bug, sekarang akan otomatis terupdate)
-        st.info(f"📦 Satuan Unit: **{it_info['Satuan']}** | 💰 Harga Terakhir: **Rp {smart_format(last_price)}**")
+    st.divider()
 
-        # 3. Form untuk input Qty dan Harga
-        with st.form("pr_form_fixed", clear_on_submit=True):
-            col_q, col_p = st.columns(2)
-            p_qty = col_q.number_input(f"Quantity ({it_info['Satuan']})", min_value=0.0, format="%.5f")
-            p_prc = col_p.number_input("Harga Satuan Beli (Rp)", value=last_price, format="%.5f")
+    # --- MULTI-ITEM SECTION ---
+    st.subheader("Item List")
+    
+    # Form untuk tambah item ke daftar sementara
+    with st.expander("➕ Tambah Item Baru ke Baris", expanded=True):
+        with st.form("add_item_row"):
+            c_it, c_qty, c_prc = st.columns([3,1,2])
+            selected_it = c_it.selectbox("Pilih Item", st.session_state.master_bahan_baku['Nama'].tolist())
             
-            total_amount = p_qty * p_prc
-            st.markdown(f"### Total Estimasi: **Rp {smart_format(total_amount)}**")
+            # Cari info item & harga terakhir
+            it_info = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Nama'] == selected_it].iloc[0]
+            history = [p for p in st.session_state.pr_data if p.get('Item') == selected_it]
+            last_price = float(history[-1]['Harga']) if history else 0.0
             
-            if st.form_submit_button("Submit Pengajuan PR"):
-                if p_qty <= 0:
-                    st.error("Quantity harus lebih dari 0")
-                else:
-                    st.session_state.pr_data.append({
-                        "ID": f"PO-{datetime.now().strftime('%y%m%d%H%M%S')}",
-                        "Tanggal": datetime.now().strftime("%Y-%m-%d"),
-                        "Item": p_item,
-                        "Satuan": it_info['Satuan'],
-                        "Qty_Pesan": p_qty,
-                        "Qty_Terima": 0.0,
-                        "Harga": p_prc,
-                        "Total": total_amount,
-                        "Status": "Pending Approval"
-                    })
-                    st.success(f"PR untuk {p_item} berhasil dikirim!")
-                    st.rerun()
+            q_val = c_qty.number_input(f"Qty ({it_info['Satuan']})", min_value=0.1)
+            p_val = c_prc.number_input("Est. Harga Satuan", value=last_price)
+            
+            if st.form_submit_button("Add Row (Tambahkan Ke Daftar)"):
+                st.session_state.pr_items_temp.append({
+                    "Kode": it_info['SKU'],
+                    "Item": selected_it,
+                    "Satuan": it_info['Satuan'],
+                    "Qty": q_val,
+                    "Harga": p_val,
+                    "Total": q_val * p_val
+                })
+                st.rerun()
+
+    # Tampilkan Tabel Baris yang Sedang Dibuat
+    if st.session_state.pr_items_temp:
+        df_temp = pd.DataFrame(st.session_state.pr_items_temp)
+        st.table(df_temp)
+        
+        grand_total = df_temp['Total'].sum()
+        st.markdown(f"### Grand Total: **Rp {smart_format(grand_total)}**")
+
+        if st.button("🚀 Submit Purchase Requisition"):
+            pr_id = f"PR-{datetime.now().strftime('%y%m%d%H%M%S')}"
+            # Simpan Header & Detail ke database PR
+            for item in st.session_state.pr_items_temp:
+                st.session_state.pr_data.append({
+                    "PR_ID": pr_id,
+                    "Tanggal": pr_date.strftime("%Y-%m-%d"),
+                    "Vendor": pr_vendor,
+                    "Delivery": pr_delivery.strftime("%Y-%m-%d"),
+                    "Requestor": pr_requestor,
+                    "Warehouse": pr_wh,
+                    "Memo": pr_memo,
+                    "Kode": item['Kode'],
+                    "Item": item['Item'],
+                    "Satuan": item['Satuan'],
+                    "Qty_Pesan": item['Qty'],
+                    "Harga": item['Harga'],
+                    "Total": item['Total'],
+                    "Status": "Pending Approval"
+                })
+            st.session_state.pr_items_temp = [] # Reset temp items
+            st.success(f"PR {pr_id} Berhasil Diajukan!")
+            st.rerun()
+        
+        if st.button("🗑️ Reset Form"):
+            st.session_state.pr_items_temp = []
+            st.rerun()
 
     # --- TAB 2: APPROVAL & PRINT PO ---
     with tab_po:
