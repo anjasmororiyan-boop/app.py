@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="ERP V13 - Separated Masters", layout="wide")
+st.set_page_config(page_title="ERP V13 - Fixed Master Config", layout="wide")
 
 # --- SMART FORMATTING FUNCTION ---
 def smart_format(val):
@@ -24,7 +24,6 @@ if 'logged_in' not in st.session_state:
 default_states = {
     'master_units': ["Kg", "Liter", "Pcs", "Gram", "Box"],
     'expense_categories': ["Gaji", "Listrik/Air", "Sewa", "Marketing"],
-    # MASTER TERPISAH
     'master_bahan_baku': pd.DataFrame([
         {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0}
     ]),
@@ -52,6 +51,8 @@ if not st.session_state.logged_in:
             if u == "admin" and p == "admin123":
                 st.session_state.logged_in = True
                 st.rerun()
+            else:
+                st.error("Login Gagal. Gunakan admin/admin123")
     st.stop()
 
 # --- SIDEBAR ---
@@ -59,7 +60,7 @@ menu = st.sidebar.radio("Navigasi Utama", [
     "Dashboard", 
     "Master Data Management", 
     "Procurement (Bahan Baku)", 
-    "POS (Penjualan)", 
+    "POS (Kasir)", 
     "Laporan Keuangan"
 ])
 
@@ -69,44 +70,81 @@ if menu == "Dashboard":
     st.subheader("📦 Stok Bahan Baku (Raw Materials)")
     st.table(st.session_state.master_bahan_baku)
 
-# --- 2. MASTER DATA MANAGEMENT (SEPARATED) ---
+# --- 2. MASTER DATA MANAGEMENT (REPAIRED) ---
 elif menu == "Master Data Management":
     st.header("⚙️ Pusat Kendali Master Data")
     t_raw, t_sale, t_cfg = st.tabs(["🌾 Master Bahan Baku", "💰 Master Penjualan", "🛠️ Unit & Expense"])
     
     with t_raw:
-        st.subheader("Database Bahan Baku (Input untuk Procurement)")
+        st.subheader("Database Bahan Baku")
         with st.form("fm_raw"):
             c1, c2 = st.columns(2)
             r_sku = c1.text_input("SKU Bahan Baku")
             r_nama = c1.text_input("Nama Bahan Baku")
-            r_satuan = c2.selectbox("Satuan Beli", st.session_state.master_units, key="sb1")
+            r_satuan = c2.selectbox("Satuan Beli", st.session_state.master_units)
             r_min = c2.number_input("Minimal Stok", format="%.5f")
             if st.form_submit_button("Simpan Bahan Baku"):
                 new_raw = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min}
                 st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_raw])], ignore_index=True)
+                st.success(f"Berhasil menambah {r_nama}")
                 st.rerun()
-        st.table(st.session_state.master_bahan_baku)
+        st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
 
     with t_sale:
-        st.subheader("Database Menu Jual (Input untuk POS)")
+        st.subheader("Database Menu Jual")
         with st.form("fm_sale"):
             c1, c2 = st.columns(2)
             s_sku = c1.text_input("SKU Produk Jual")
             s_nama = c1.text_input("Nama Menu/Produk")
             s_harga = c2.number_input("Harga Jual (Rp)", format="%.5f")
-            s_sat = c2.selectbox("Satuan Jual", st.session_state.master_units, key="sb2")
+            s_sat = c2.selectbox("Satuan Jual", st.session_state.master_units)
             if st.form_submit_button("Simpan Menu Jual"):
                 new_sale = {"SKU": s_sku, "Nama": s_nama, "Satuan": s_sat, "Harga_Jual": s_harga}
                 st.session_state.master_penjualan = pd.concat([st.session_state.master_penjualan, pd.DataFrame([new_sale])], ignore_index=True)
+                st.success(f"Berhasil menambah {s_nama}")
                 st.rerun()
-        st.table(st.session_state.master_penjualan)
+        st.dataframe(st.session_state.master_penjualan, use_container_width=True)
 
     with t_cfg:
-        st.subheader("Pengaturan Satuan & Biaya")
-        # Logic tambah/hapus unit dan kategori expense tetap ada di sini
-        st.write(st.session_state.master_units)
+        st.subheader("Konfigurasi Satuan & Tipe Biaya")
+        
+        col_unit, col_exp = st.columns(2)
+        
+        # --- BAGIAN SATUAN UNIT ---
+        with col_unit:
+            st.write("### 📏 Manage Units")
+            with st.form("add_unit_form", clear_on_submit=True):
+                new_u = st.text_input("Tambah Satuan Baru")
+                if st.form_submit_button("Tambah Unit"):
+                    if new_u and new_u not in st.session_state.master_units:
+                        st.session_state.master_units.append(new_u)
+                        st.rerun()
+            
+            # List Satuan dengan tombol hapus
+            for idx, u in enumerate(st.session_state.master_units):
+                ca, cb = st.columns([3, 1])
+                ca.write(f"- {u}")
+                if cb.button("🗑️", key=f"del_u_{idx}"):
+                    st.session_state.master_units.pop(idx)
+                    st.rerun()
 
+        # --- BAGIAN TIPE BIAYA ---
+        with col_exp:
+            st.write("### 💸 Manage Expense Types")
+            with st.form("add_exp_form", clear_on_submit=True):
+                new_e = st.text_input("Tambah Tipe Biaya Baru")
+                if st.form_submit_button("Tambah Biaya"):
+                    if new_e and new_e not in st.session_state.expense_categories:
+                        st.session_state.expense_categories.append(new_e)
+                        st.rerun()
+            
+            # List Biaya dengan tombol hapus
+            for idx, e in enumerate(st.session_state.expense_categories):
+                ca, cb = st.columns([3, 1])
+                ca.write(f"- {e}")
+                if cb.button("🗑️", key=f"del_e_{idx}"):
+                    st.session_state.expense_categories.pop(idx)
+                    st.rerun()
 # --- 3. PROCUREMENT (INTEGRATED WITH RAW MATERIALS) ---
 elif menu == "Procurement (Bahan Baku)":
     st.header("🛒 Pengadaan Bahan Baku")
