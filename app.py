@@ -147,24 +147,131 @@ elif menu == "Master Data Management":
                     st.rerun()
 # --- 3. PROCUREMENT (INTEGRATED WITH RAW MATERIALS) ---
 elif menu == "Procurement (Bahan Baku)":
-    st.header("🛒 Pengadaan Bahan Baku")
-    with st.expander("📝 Buat PR Bahan Baku"):
-        with st.form("pr_raw"):
-            # HANYA MENGAMBIL DARI MASTER BAHAN BAKU
-            p_item = st.selectbox("Pilih Bahan Baku", st.session_state.master_bahan_baku['Nama'].tolist())
-            it_info = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Nama'] == p_item].iloc[0]
-            st.info(f"Satuan Standar: {it_info['Satuan']}")
-            p_qty = st.number_input("Qty Pesanan", format="%.5f")
-            p_prc = st.number_input("Harga Beli per Satuan", format="%.5f")
-            if st.form_submit_button("Submit PR"):
-                st.session_state.pr_data.append({
-                    "ID": f"PR-{datetime.now().strftime('%M%S')}", "Item": p_item, 
-                    "Satuan": it_info['Satuan'], "Qty_Pesan": p_qty, "Qty_Terima": 0.0, "Status": "Pending"
-                })
-                st.rerun()
+    st.header("🛒 Pengadaan Bahan Baku (Procurement)")
     
-    # Logic GR (Goods Receipt) akan menambah stok ke st.session_state.master_bahan_baku
+    tab_pr, tab_po = st.tabs(["📝 Pengajuan PR", "📄 Approval & Dokumen PO"])
 
+    # --- TAB 1: PENGAJUAN PR ---
+    with tab_pr:
+        st.subheader("Form Purchase Requisition")
+        with st.form("pr_form_v14"):
+            # 1. Pilih Item dari Master Bahan Baku
+            p_item = st.selectbox("Pilih Bahan Baku", st.session_state.master_bahan_baku['Nama'].tolist())
+            
+            # 2. Ambil Info dari Master (Satuan & Harga Terakhir)
+            it_info = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Nama'] == p_item].iloc[0]
+            
+            # Cari harga terakhir di history (jika ada)
+            last_price = 0.0
+            history = [p for p in st.session_state.pr_data if p['Item'] == p_item and p['Status'] == 'Closed']
+            if history:
+                last_price = float(history[-1]['Harga'])
+            else:
+                # Jika belum pernah beli, bisa disetting default atau 0
+                last_price = 0.0
+
+            st.info(f"Satuan: {it_info['Satuan']} | Harga Terakhir: Rp {smart_format(last_price)}")
+
+            col_q, col_p = st.columns(2)
+            p_qty = col_q.number_input("Quantity Dibutuhkan", min_value=0.0, format="%.5f")
+            p_prc = col_p.number_input("Harga Satuan (Rp)", value=last_price, format="%.5f")
+            
+            # 3. Hitung Total Amount
+            total_amount = p_qty * p_prc
+            st.markdown(f"### Total Purchase: **Rp {smart_format(total_amount)}**")
+            
+            if st.form_submit_button("Submit Pengajuan PR"):
+                if p_qty <= 0:
+                    st.error("Quantity harus lebih dari 0")
+                else:
+                    st.session_state.pr_data.append({
+                        "ID": f"PO-{datetime.now().strftime('%y%m%d%H%M%S')}",
+                        "Tanggal": datetime.now().strftime("%Y-%m-%d"),
+                        "Item": p_item,
+                        "Satuan": it_info['Satuan'],
+                        "Qty_Pesan": p_qty,
+                        "Qty_Terima": 0.0,
+                        "Harga": p_prc,
+                        "Total": total_amount,
+                        "Status": "Pending Approval"
+                    })
+                    st.success("PR Berhasil Diajukan!")
+                    st.rerun()
+
+    # --- TAB 2: APPROVAL & PRINT PO ---
+    with tab_po:
+        st.subheader("Approval & Dokumen Purchase Order")
+        
+        pending_list = [p for p in st.session_state.pr_data if p['Status'] == "Pending Approval"]
+        
+        if not pending_list:
+            st.info("Tidak ada dokumen yang menunggu persetujuan.")
+        
+        for i, pr in enumerate(pending_list):
+            with st.expander(f"Review {pr['ID']} - {pr['Item']}"):
+                st.write(f"Tanggal: {pr['Tanggal']}")
+                st.write(f"Estimasi Total: Rp {smart_format(pr['Total'])}")
+                
+                c1, c2 = st.columns(2)
+                if c1.button("✅ Approve (Terbitkan PO)", key=f"app_v14_{i}"):
+                    # Cari index asli di session state dan ubah status
+                    for idx, item in enumerate(st.session_state.pr_data):
+                        if item['ID'] == pr['ID']:
+                            st.session_state.pr_data[idx]['Status'] = "Approved"
+                    st.rerun()
+                
+                if c2.button("❌ Reject", key=f"rej_v14_{i}"):
+                    for idx, item in enumerate(st.session_state.pr_data):
+                        if item['ID'] == pr['ID']:
+                            st.session_state.pr_data[idx]['Status'] = "Rejected"
+                    st.rerun()
+
+        # TAMPILAN UNTUK PRINT (PO YANG SUDAH APPROVED)
+        st.divider()
+        st.subheader("🖨️ Dokumen PO Siap Cetak")
+        ready_po = [p for p in st.session_state.pr_data if p['Status'] == "Approved"]
+        
+        if ready_po:
+            selected_po_id = st.selectbox("Pilih PO untuk Dicetak", [p['ID'] for p in ready_po])
+            po_print = next(item for item in ready_po if item["ID"] == selected_id)
+
+            # --- DOKUMEN PO AREA (PRINTABLE) ---
+            st.markdown(f"""
+            <div style="border: 2px solid black; padding: 20px; border-radius: 10px; background-color: white; color: black;">
+                <h2 style="text-align: center;">PURCHASE ORDER</h2>
+                <hr>
+                <table style="width: 100%;">
+                    <tr><td><strong>No. PO:</strong> {po_print['ID']}</td><td style="text-align: right;"><strong>Tanggal:</strong> {po_print['Tanggal']}</td></tr>
+                </table>
+                <br>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="border: 1px solid black; padding: 8px;">Deskripsi Barang</th>
+                        <th style="border: 1px solid black; padding: 8px;">Qty</th>
+                        <th style="border: 1px solid black; padding: 8px;">Satuan</th>
+                        <th style="border: 1px solid black; padding: 8px;">Harga Satuan</th>
+                        <th style="border: 1px solid black; padding: 8px;">Total</th>
+                    </tr>
+                    <tr>
+                        <td style="border: 1px solid black; padding: 8px;">{po_print['Item']}</td>
+                        <td style="border: 1px solid black; padding: 8px; text-align: center;">{smart_format(po_print['Qty_Pesan'])}</td>
+                        <td style="border: 1px solid black; padding: 8px; text-align: center;">{po_print['Satuan']}</td>
+                        <td style="border: 1px solid black; padding: 8px; text-align: right;">Rp {smart_format(po_print['Harga'])}</td>
+                        <td style="border: 1px solid black; padding: 8px; text-align: right;">Rp {smart_format(po_print['Total'])}</td>
+                    </tr>
+                </table>
+                <br>
+                <p><strong>Grand Total: Rp {smart_format(po_print['Total'])}</strong></p>
+                <br><br>
+                <table style="width: 100%; text-align: center;">
+                    <tr>
+                        <td>Dibuat Oleh,<br><br><br>( Staff Procurement )</td>
+                        <td>Disetujui Oleh,<br><br><br>( Direktur Operasional )</td>
+                    </tr>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
+            st.caption("Gunakan Ctrl+P atau fitur browser 'Print to PDF' untuk menyimpan dokumen di atas.")
 # --- 4. POS (INTEGRATED WITH SALES ITEMS) ---
 elif menu == "POS (Penjualan)":
     st.header("💰 Kasir Penjualan")
