@@ -25,8 +25,15 @@ if 'logged_in' not in st.session_state:
 default_states = {
     'master_units': ["Kg", "Liter", "Pcs", "Gram", "Box"],
     'expense_categories': ["Gaji", "Listrik/Air", "Sewa", "Marketing"],
-    'master_vendors': ["PT. Sumber Pangan", "UD. Makmur Jaya", "Toko Bahan Kue ABC"],
-    'master_warehouses': ["Gudang Utama", "Central Kitchen", "Gudang Bahan Baku"],
+    'master_vendors': pd.DataFrame([
+        {"Nama": "PT. Sumber Pangan", "Status": "Active"},
+        {"Nama": "UD. Makmur Jaya", "Status": "Active"}
+    ]),
+    'master_warehouses': pd.DataFrame([
+        {"Nama": "Gudang Utama", "Status": "Active"},
+        {"Nama": "Central Kitchen", "Status": "Active"},
+        {"Nama": "Gudang Bahan Baku"] "Status": "Active"},
+    ]),
     'master_bahan_baku': pd.DataFrame([
         {"SKU": "RAW001", "Nama": "Tepung Terigu", "Satuan": "Kg", "Stok": 50.0, "Min_Stok": 10.0, "Status": "Active"}
     ]),
@@ -79,31 +86,31 @@ elif menu == "Master Data Management":
     t_raw, t_sale, t_cfg, t_vendor, t_wh = st.tabs(["🌾 Bahan Baku", "💰 Penjualan", "🛠️ Unit & Expense", "🏢 Vendor", "🏠 Warehouse"])
     
     with t_raw:
-    st.subheader("Master Bahan Baku")
+    st.subheader("Manajemen Bahan Baku")
     with st.expander("➕ Tambah / Edit Bahan Baku"):
-        with st.form("fm_raw"):
+        with st.form("fm_raw_edit"):
             c1, c2 = st.columns(2)
-            r_sku = c1.text_input("SKU (Input SKU lama untuk Update)")
-            r_nama = c1.text_input("Nama")
+            r_sku = c1.text_input("SKU (Gunakan SKU lama untuk Edit)")
+            r_nama = c1.text_input("Nama Bahan")
             r_satuan = c2.selectbox("Satuan", st.session_state.master_units)
-            r_min = c2.number_input("Min Stok", format="%.5f")
-            # TAMBAHKAN FIELD STATUS
-            r_status = c2.selectbox("Status", ["Active", "Inactive"]) 
+            r_min = c2.number_input("Minimal Stok", format="%.5f")
+            r_status = c2.selectbox("Status", ["Active", "Inactive"]) # Fitur Inaktif
             
-            if st.form_submit_button("Simpan"):
-                # LOGIKA UPDATE (UPSERT)
+            if st.form_submit_button("Simpan Data"):
+                # Cek apakah SKU sudah ada di dataframe
                 mask = st.session_state.master_bahan_baku['SKU'] == r_sku
                 if mask.any():
-                    # Jika SKU sudah ada, update datanya
+                    # UPDATE DATA
                     st.session_state.master_bahan_baku.loc[mask, ['Nama', 'Satuan', 'Min_Stok', 'Status']] = [r_nama, r_satuan, r_min, r_status]
-                    st.success(f"Data {r_sku} berhasil diperbarui!")
+                    st.success(f"Update Berhasil: {r_sku}")
                 else:
-                    # Jika SKU baru, tambah baris baru
-                    new_row = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min, "Status": r_status}
-                    st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_row])], ignore_index=True)
-                    st.success("Item baru berhasil ditambah!")
+                    # TAMBAH BARU
+                    new_data = {"SKU": r_sku, "Nama": r_nama, "Satuan": r_satuan, "Stok": 0.0, "Min_Stok": r_min, "Status": r_status}
+                    st.session_state.master_bahan_baku = pd.concat([st.session_state.master_bahan_baku, pd.DataFrame([new_data])], ignore_index=True)
+                    st.success("Item Baru Berhasil Ditambahkan")
                 st.rerun()
-        st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
+    
+    st.dataframe(st.session_state.master_bahan_baku, use_container_width=True)
 
     with t_sale:
         st.subheader("Database Menu Jual")
@@ -183,7 +190,7 @@ elif menu == "Master Data Management":
 
 # --- 3. PROCUREMENT (PR MULTI-ITEM) ---
 elif menu == "Procurement (Bahan Baku)":
-    st.header("📋 Purchase Requisition (PR)")
+    st.header("🛒 Purchase Requisition (PR)")
     
     # DEFINISIKAN TABS DI SINI (Ini kunci perbaikan error Anda)
     tab_pr, tab_po = st.tabs(["📝 Buat PR Baru", "📄 Approval & Monitoring"])
@@ -211,13 +218,11 @@ elif menu == "Procurement (Bahan Baku)":
         
         # Selectbox di luar form agar UI (Satuan & Kode) update otomatis saat item diganti
         active_items = st.session_state.master_bahan_baku[st.session_state.master_bahan_baku['Status'] == "Active"]
-
 if active_items.empty:
-    st.warning("Tidak ada bahan baku aktif yang tersedia.")
-else:
-    p_item_name = st.selectbox("Pilih Bahan Baku untuk ditambahkan", 
-                                active_items['Nama'].tolist(), # Gunakan list hasil filter
-                                key="pr_item_select")
+            st.warning("Tidak ada item aktif di Master Data.")
+        else:
+            p_item = st.selectbox("Pilih Bahan Baku", active_items['Nama'].tolist())
+            it_info = active_items[active_items['Nama'] == p_item].iloc[0]
     
     # Ambil info dari active_items
     it_info = active_items[active_items['Nama'] == p_item_name].iloc[0]
@@ -289,13 +294,11 @@ else:
 
     # --- TAB 2: APPROVAL & MONITORING ---
     with tab_po:
-        st.subheader("Approval & Monitoring Dokumen")
+        st.subheader("Monitoring Approval")
         if not st.session_state.pr_data:
-            st.info("Belum ada data pengajuan PR.")
+            st.info("Belum ada pengajuan PR.")
         else:
-            # Tampilkan dalam dataframe agar bisa di-filter/search
-            df_all = pd.DataFrame(st.session_state.pr_data)
-            st.dataframe(df_all, use_container_width=True)
+            st.dataframe(pd.DataFrame(st.session_state.pr_data))
             
             # Logika Approval per Nomor PR
             unique_prs = df_all[df_all['Status'] == "Pending Approval"]['PR_ID'].unique()
