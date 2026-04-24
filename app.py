@@ -232,7 +232,7 @@ else:
         it_info = active_items[active_items['Nama'] == p_item].iloc[0]
     
     # Ambil info dari active_items
-    it_info = active_items[active_items['Nama'] == p_item_name].iloc[0]
+        it_info = active_items[active_items['Nama'] == p_item_name].iloc[0]
         
         # Cari harga terakhir dari histori PR
         history = [p for p in st.session_state.pr_data if p.get('Item') == p_item_name]
